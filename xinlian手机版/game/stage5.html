@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 收藏与文件</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  .note-card { margin:14px; padding:20px; background:#1a1a1a; color:#ddd; border-radius:8px; font-family:Consolas,monospace; border-left:3px solid #ff3b3b; }
+  .note-card .id { color:#ff3b3b; font-size:11px; margin-bottom:8px; }
+  .note-card .body { font-size:13px; line-height:1.8; }
+  .note-card.locked .body { filter:blur(4px); user-select:none; }
+  .pw-row { margin:14px; display:flex; gap:8px; }
+  .pw-row input { flex:1; padding:10px; border:1px solid #ddd; border-radius:4px; font-size:14px; }
+  .pw-row button { padding:10px 20px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; font-size:14px; }
+  .file-list { padding:0; }
+  .file-row { display:flex; align-items:center; gap:10px; padding:12px 14px; background:#fff; border-bottom:1px solid #f0f0f0; }
+  .file-row .ic { width:36px; height:36px; border-radius:6px; background:#888; color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .file-row .bd { flex:1; }
+  .file-row .n { font-size:13px; }
+  .file-row .s { font-size:11px; color:#999; margin-top:3px; }
+  .file-ops { padding:14px; }
+  .file-ops button { width:100%; padding:12px; background:#08C260; color:#fff; border:0; border-radius:6px; font-size:15px; cursor:pointer; margin-bottom:8px; }
+  .file-ops button.gray { background:#888; }
+  .panel { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+  .panel.on { display:flex; }
+  .panel .box { background:#fff; padding:20px; border-radius:8px; width:340px; }
+  .panel .box h3 { font-size:15px; margin-bottom:12px; }
+  .panel .box label { display:block; font-size:12px; color:#666; margin-bottom:4px; margin-top:10px; }
+  .panel .box input { width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; }
+  .panel .box button { width:100%; padding:9px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; margin-top:12px; }
+  .storage-item { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #f0f0f0; font-size:13px; }
+  .storage-item:last-child { border-bottom:0; }
+  .wrench { position:fixed; right:20px; bottom:80px; width:52px; height:52px; border-radius:50%; background:#08C260; color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,.25); z-index:60; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  if (!S.guard('fav')) return;
+
+  const FIB13 = 233;
+  const STORAGE_GB = 2.3;
+  const STORAGE_DR = 2 + 3;
+  const FAV_PASS = STORAGE_DR * FIB13;
+
+  let favUnlocked = !!S.get('favUnlocked');
+  let fileSent = !!S.get('fileSent');
+  let fileFixed = !!S.get('fileFixed');
+
+  function renderOmega(body) {
+    body.innerHTML = App.topBar('Ω', { back: true, dots: true }) + '<div class="app-empty">加密通讯</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderGroup(body) {
+    body.innerHTML = App.topBar('修复者联盟', { back: true, dots: true }) + '<div class="app-empty">群聊已解禁</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+
+  function renderFileStation(body) {
+    body.innerHTML =
+      App.topBar('文件驿站', { back: true }) +
+      '<div class="file-list">' +
+        '<div class="file-row"><div class="ic">Ω</div><div class="bd"><div class="n">core.dat</div><div class="s">' + (fileFixed ? '已修复' : (fileSent ? '乱码 / 待修复' : '乱码 / 类型被禁')) + '</div></div></div>' +
+      '</div>' +
+      '<div class="file-ops">' +
+        '<button id="sendFile">发送文件</button>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list') });
+    document.getElementById('sendFile').onclick = openSendFile;
+    if (fileSent && !fileFixed) showWrench();
+  }
+
+  function openSendFile() {
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>发送文件</h3>' +
+        '<label>文件名</label>' +
+        '<input id="sfName" value="core.dat">' +
+        '<label>后缀</label>' +
+        '<input id="sfExt" placeholder="如 .tmp">' +
+        '<label>消息内容</label>' +
+        '<input id="sfMsg" placeholder="输入消息内容">' +
+        '<button id="sfOk">发送</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    document.getElementById('sfOk').onclick = () => {
+      const ext = document.getElementById('sfExt').value.trim();
+      const msg = document.getElementById('sfMsg').value.trim();
+      if (ext !== '.tmp') {
+        ui.toast('类型校验失败：后缀未伪装', 'error');
+        S.add('errors', 1);
+        return;
+      }
+      if (msg !== '附件') {
+        ui.toast('内容校验失败：缺少附件声明', 'error');
+        S.add('errors', 1);
+        return;
+      }
+      mask.remove();
+      fileSent = true;
+      S.set('fileSent', true);
+      ui.toast('文件已发送', 'ok');
+      App.rerender();
+      showWrench();
+    };
+  }
+
+  function showWrench() {
+    if (document.getElementById('fixWrench')) return;
+    const w = ui.el('div', 'wrench', '🔧');
+    w.id = 'fixWrench';
+    w.onclick = () => {
+      fileFixed = true;
+      S.set('fileFixed', true);
+      w.remove();
+      ui.toast('文件已修复', 'ok');
+      App.rerender();
+      checkStage();
+    };
+    document.body.appendChild(w);
+  }
+
+  const contacts = [
+    { g: 'A', n: 'Ω', s: '加密通讯' },
+    { g: 'A', n: '阿黑', s: '已拉黑' },
+    { g: 'B', n: '被拉黑的人', s: '已被拉黑' },
+    { g: 'C', n: '残页', s: '已拉黑' },
+    { g: 'D', n: '数据包', s: '已拉黑' },
+    { g: 'F', n: '斐波那契', s: '已拉黑' },
+    { g: 'G', n: '黄金分割', s: '已拉黑' },
+    { g: 'H', n: '黑客Ω', s: '已拉黑' },
+    { g: 'J', n: '镜像', s: '已拉黑' },
+    { g: 'M', n: '密码', s: '已拉黑' },
+    { g: 'Q', n: '钱包', s: '已拉黑' },
+    { g: 'S', n: '数字根', s: '已拉黑' },
+    { g: 'W', n: '文件驿站', s: '已拉黑' },
+    { g: 'X', n: '修复协议', s: '已拉黑' },
+    { g: 'Y', n: '验证码', s: '已拉黑' }
+  ];
+  function renderContacts(body) {
+    let html = App.topBar('通讯录', { search: true, plus: true }) + '<div style="flex:1;overflow-y:auto;background:#fff">';
+    let lastG = '';
+    contacts.forEach((c, i) => {
+      if (c.g !== lastG) { html += '<div class="app-group">' + c.g + '</div>'; lastG = c.g; }
+      html += '<div class="app-row" data-ci="' + i + '"><div class="av">' + c.n.charAt(0) + '</div><div class="bd"><div class="n">' + c.n + '</div><div class="s">' + c.s + '</div></div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    App.bindTop({ onSearch: () => ui.toast('搜索模块待修复', 'error'), onPlus: App.showPlus });
+    body.querySelectorAll('.app-row[data-ci]').forEach(r => {
+      r.onclick = () => {
+        const c = contacts[+r.dataset.ci];
+        if (c.n === 'Ω') ui.toast('加密通讯，请前往聊天', 'ok');
+        else ui.toast('发送失败：你已被对方拉黑', 'error');
+      };
+    });
+  }
+
+  function renderMomentsPage(body) {
+    body.innerHTML =
+      App.topBar('朋友圈', { back: true }) +
+      '<div style="flex:1;overflow-y:auto">' +
+        '<div style="height:200px;background:linear-gradient(135deg,#08C260,#06AD56)"></div>' +
+        '<div style="display:flex;align-items:flex-end;gap:12px;padding:0 14px;margin-top:-30px">' +
+          '<div style="width:64px;height:64px;border-radius:8px;background:#08C260;color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;border:3px solid #fff">Ω</div>' +
+          '<div style="padding-bottom:6px;font-size:16px;font-weight:600">Ω</div>' +
+        '</div>' +
+        '<div style="background:#fff;margin:12px 0;padding:14px;font-size:14px;color:#333">协议已修复。你的选择决定了我的去向。</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchDiscoverView('list') });
+  }
+
+  function renderMe(body) {
+    const acc = S.get('acc') || {};
+    body.innerHTML =
+      App.topBar('我') +
+      '<div class="me-header"><div class="av">' + (acc.nickname ? acc.nickname.charAt(0) : 'Ω') + '</div><div><div class="n">' + (acc.nickname || '修复者') + '</div><div class="s">微信号：' + (acc.phone || 'wxid_omega') + '</div></div></div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="goWallet"><div class="bd"><div class="n">服务（钱包）</div><div class="s">已解冻</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="goFav"><div class="bd"><div class="n">收藏</div><div class="s">' + (favUnlocked ? '已解锁' : '加密笔记') + '</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="goMoments"><div class="bd"><div class="n">朋友圈</div><div class="s">已修复</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">作品</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row disabled" id="goSet"><div class="bd"><div class="n">设置</div><div class="s">锁定</div></div></div>' +
+      '</div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="mAbout"><div class="bd"><div class="n">关于信连</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="mNotes"><div class="bd"><div class="n">Ω 的数学笔记</div></div><div class="arrow">›</div></div>' +
+      '</div>';
+    document.getElementById('goWallet').onclick = () => App.switchMeView('wallet');
+    document.getElementById('goFav').onclick = () => App.switchMeView('fav');
+    document.getElementById('goMoments').onclick = () => { App.switchTab('discover'); App.switchDiscoverView('moments'); };
+    document.getElementById('goSet').onclick = () => {
+      const tries = S.get('favTries') || 0;
+      if (tries >= 3) ui.toast('数字根？斐波那契？', 'ok');
+      else ui.toast('存储空间？我只留了这一页给你看。', 'ok');
+      App.switchMeView('settings');
+    };
+    document.getElementById('mAbout').onclick = () => location.href = 'about.html?from=stage5';
+    document.getElementById('mNotes').onclick = () => location.href = 'notes.html?from=stage5';
+  }
+
+  function renderWallet(body) {
+    body.innerHTML =
+      App.topBar('服务', { back: true }) +
+      '<div style="padding:20px 14px;background:linear-gradient(135deg,#08C260,#06AD56);color:#fff;margin-bottom:10px">' +
+        '<div style="font-size:12px;opacity:.8">余额</div>' +
+        '<div style="font-size:28px;font-weight:600;margin-top:6px">¥ 0.01</div>' +
+        '<div style="font-size:11px;opacity:.8;margin-top:8px">钱包已解冻</div>' +
+      '</div>' +
+      '<div style="padding:20px;text-align:center;color:#999;font-size:13px">账单已恢复</div>';
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+  }
+
+  function renderFav(body) {
+    const tries = S.get('favTries') || 0;
+    let hint = '';
+    if (tries >= 3 && !favUnlocked) {
+      hint = '<div style="text-align:center;font-size:12px;color:#ff3b3b;margin:10px 0">...设置？</div>';
+    }
+    body.innerHTML =
+      App.topBar('收藏', { back: true }) +
+      '<div class="note-card ' + (favUnlocked ? '' : 'locked') + '">' +
+        '<div class="id">Ω-收藏-01</div>' +
+        '<div class="body">我的核心密钥藏在文件驿站。<br>发送附件时，别忘了伪装。</div>' +
+      '</div>' +
+      hint +
+      (favUnlocked ? '' :
+        '<div class="pw-row">' +
+          '<input id="favPw" placeholder="输入收藏密码">' +
+          '<button id="favOk">解锁</button>' +
+        '</div>');
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+    const ok = document.getElementById('favOk');
+    if (ok) ok.onclick = () => {
+      const v = +document.getElementById('favPw').value.trim();
+      if (v === FAV_PASS) {
+        favUnlocked = true;
+        S.set('favUnlocked', true);
+        S.set('favTries', 0);
+        ui.toast('收藏已解锁', 'ok');
+        App.rerender();
+        setTimeout(() => {
+          ui.popup('检测到未完成的任务', '前往 聊天→文件驿站 完成文件传输', [{
+            t: '前往', primary: true, fn: () => {
+              App.switchTab('chat');
+              App.switchChatView('file');
+            }
+          }]);
+        }, 500);
+      } else {
+        S.add('errors', 1);
+        const newTries = (S.get('favTries') || 0) + 1;
+        S.set('favTries', newTries);
+        if (newTries >= 5) Notes.hit('Ω-07');
+        if (newTries >= 3) {
+          ui.toast('密码错误。...设置？', 'error');
+        } else {
+          ui.toast('密码错误', 'error');
+        }
+        App.rerender();
+      }
+    };
+    checkStage();
+  }
+
+  function renderSettings(body) {
+    body.innerHTML =
+      App.topBar('设置', { back: true }) +
+      '<div style="background:#fff;padding:14px">' +
+        '<div class="storage-item"><span>总容量</span><b>' + STORAGE_GB + ' GB</b></div>' +
+        '<div class="storage-item"><span>已用</span><span>0.0 GB</span></div>' +
+        '<div class="storage-item"><span>可用</span><span>' + STORAGE_GB + ' GB</span></div>' +
+        '<div style="font-size:11px;color:#999;margin-top:12px;line-height:1.6">提示：总容量的数字根 × 斐波那契第13项 = 收藏密码</div>' +
+      '</div>' +
+      '<div style="background:#fff;margin-top:10px">' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">账号与安全</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">隐私</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">多语言</div></div></div>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+    body.querySelectorAll('.app-row.disabled').forEach(r => {
+      r.onclick = () => ui.toast('该模块仍被锁定', 'error');
+    });
+  }
+
+  function checkStage() {
+    if (S.get('stage5Done')) return;
+    if (favUnlocked && fileSent && fileFixed) {
+      S.set('stage5Done', true);
+      S.unlock('settings');
+      S.progress(80);
+      ui.omega('你的数字感不错，但你还没解开我的签名。');
+      setTimeout(() => {
+        ui.popup('阶段完成', '收藏与文件已恢复。<br>修复进度 80%', [{
+          t: '前往设置', primary: true, fn: () => {
+            S.set('stage', 'stage6');
+            location.href = 'stage6.html';
+          }
+        }]);
+      }, 600);
+    }
+  }
+
+  App.init(document.getElementById('root'), {
+    defaultTab: 'me',
+    renderOmega, renderGroup, renderFile: renderFileStation, renderContacts, renderMomentsPage,
+    renderMe, renderWallet, renderFav, renderSettings,
+    onScan: () => ui.toast('扫一扫模块待修复', 'error')
+  });
+
+  setTimeout(() => App.switchMeView('fav'), 30);
+})();
+</script>
+</body>
+</html>

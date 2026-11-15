@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>关于信连</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  body { background:#fff; }
+  .doc { max-width:480px; margin:0 auto; min-height:100vh; background:#fff; }
+  .doc-top { background:#2A2A2A; color:#fff; padding:14px; display:flex; align-items:center; font-size:16px; position:sticky; top:0; z-index:10; }
+  .doc-top .back { font-size:20px; cursor:pointer; width:40px; }
+  .doc-top .t { flex:1; text-align:center; }
+  .doc-body { padding:20px 18px 40px; font-size:14px; line-height:1.9; color:#333; }
+  .doc-body h2 { font-size:16px; margin:20px 0 10px; }
+  .doc-body p { margin-bottom:12px; }
+  .doc-body .ver { font-family:Consolas,monospace; color:#08C260; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-top">
+    <div class="back" id="back">‹</div>
+    <div class="t">关于信连</div>
+    <div style="width:40px"></div>
+  </div>
+  <div class="doc-body">
+    <h2>信连</h2>
+    <p>版本号：<span class="ver">8.0.43</span></p>
+    <p>信连是一款即时通讯软件，致力于连接每一份信任。</p>
+    <h2>修复协议说明</h2>
+    <p>当核心服务被劫持时，客户端将进入离线修复模式。请按照提示逐层恢复权限。</p>
+    <p>修复过程中产生的数据仅保存在本地，不会上传。</p>
+    <h2>免责声明</h2>
+    <p>本游戏为完全虚构作品，所有名称、标识、界面均不指向任何现实品牌。致敬国民级社交软件，但本作无任何商业关联。</p>
+  </div>
+</div>
+<script>
+document.getElementById('back').onclick = () => {
+  const from = new URLSearchParams(location.search).get('from');
+  if (from === 'reg') location.href = 'stage1.html?view=reg';
+  else if (from === 'login') location.href = 'stage1.html?view=login';
+  else history.back();
+};
+</script>
+</body>
+</html>

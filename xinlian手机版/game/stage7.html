@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 轻应用</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  .scan-page { flex:1; display:flex; flex-direction:column; background:#111; position:relative; }
+  .scan-box { flex:1; display:flex; align-items:center; justify-content:center; }
+  .scan-frame { width:220px; height:220px; border:2px solid rgba(8,194,96,.6); border-radius:12px; position:relative; cursor:pointer; }
+  .scan-frame::before, .scan-frame::after { content:''; position:absolute; width:30px; height:30px; border:3px solid #08C260; }
+  .scan-frame::before { top:-3px; left:-3px; border-right:0; border-bottom:0; border-radius:12px 0 0 0; }
+  .scan-frame::after { bottom:-3px; right:-3px; border-left:0; border-top:0; border-radius:0 0 12px 0; }
+  .scan-line { position:absolute; left:10%; right:10%; height:2px; background:linear-gradient(90deg,transparent,#08C260,transparent); animation:scanLine 2s linear infinite; }
+  @keyframes scanLine { 0%{top:10%} 50%{top:90%} 100%{top:10%} }
+  .scan-hint { position:absolute; bottom:40px; left:0; right:0; text-align:center; color:#888; font-size:12px; }
+
+  .calc-page { flex:1; display:flex; flex-direction:column; background:#1a1a1a; }
+  .calc-display { padding:20px; text-align:right; color:#fff; font-family:Consolas,monospace; font-size:32px; min-height:80px; word-break:break-all; }
+  .calc-ops-top { display:flex; padding:0 10px 10px; gap:6px; }
+  .calc-ops-top button { flex:1; padding:10px; background:#333; color:#fff; border:0; border-radius:6px; font-size:14px; cursor:pointer; }
+  .calc-ops-top button:disabled { opacity:.3; cursor:not-allowed; }
+  .calc-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:10px; flex:1; }
+  .calc-grid button { background:#2a2a2a; color:#fff; border:0; border-radius:6px; font-size:20px; cursor:pointer; }
+  .calc-grid button.op { background:#08C260; }
+  .calc-grid button.eq { background:#ff9500; }
+  .calc-grid button:active { background:#444; }
+  .calc-grid button.op:active { background:#06AD56; }
+  .calc-grid button.eq:active { background:#cc7700; }
+
+  .panel { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+  .panel.on { display:flex; }
+  .panel .box { background:#fff; padding:20px; border-radius:8px; width:340px; }
+  .panel .box h3 { font-size:15px; margin-bottom:12px; }
+  .panel .box input { width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; margin:10px 0; }
+  .panel .box button { width:100%; padding:9px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; }
+  .panel .box .tip { font-size:11px; color:#888; line-height:1.6; }
+
+  .final-mask { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:9500; display:none; flex-direction:column; align-items:center; justify-content:center; padding:30px; }
+  .final-mask.on { display:flex; }
+  .final-mask .omega-txt { color:#ff3b3b; font-family:Consolas,monospace; font-size:14px; line-height:1.8; text-align:center; margin-bottom:30px; max-width:400px; }
+  .final-mask .choices { display:flex; gap:20px; }
+  .final-mask .choices button { padding:14px 30px; border-radius:6px; font-size:15px; cursor:pointer; border:0; }
+  .final-mask .choices button.del { background:#08C260; color:#fff; }
+  .final-mask .choices button.keep { background:#a00; color:#fff; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  if (!S.guard('app')) return;
+
+  let scanHits = 0;
+  let calcInput = '';
+  let scientific = false;
+  let helpUnlocked = false;
+  let calcLoaded = false;
+
+  function renderOmega(body) {
+    body.innerHTML = App.topBar('Ω', { back: true, dots: true }) + '<div class="app-empty">加密通讯</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderGroup(body) {
+    body.innerHTML = App.topBar('修复者联盟', { back: true, dots: true }) + '<div class="app-empty">群聊已解禁</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderFile(body) {
+    body.innerHTML = App.topBar('文件驿站', { back: true, dots: true }) + '<div class="app-empty">已恢复</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+
+  const contacts = [
+    { g: 'A', n: 'Ω', s: '加密通讯' },
+    { g: 'A', n: '阿黑', s: '已拉黑' },
+    { g: 'B', n: '被拉黑的人', s: '已被拉黑' },
+    { g: 'C', n: '残页', s: '已拉黑' },
+    { g: 'D', n: '数据包', s: '已拉黑' },
+    { g: 'F', n: '斐波那契', s: '已拉黑' },
+    { g: 'G', n: '黄金分割', s: '已拉黑' },
+    { g: 'H', n: '黑客Ω', s: '已拉黑' },
+    { g: 'J', n: '镜像', s: '已拉黑' },
+    { g: 'M', n: '密码', s: '已拉黑' },
+    { g: 'Q', n: '钱包', s: '已拉黑' },
+    { g: 'S', n: '数字根', s: '已拉黑' },
+    { g: 'W', n: '文件驿站', s: '已拉黑' },
+    { g: 'X', n: '修复协议', s: '已拉黑' },
+    { g: 'Y', n: '验证码', s: '已拉黑' }
+  ];
+  function renderContacts(body) {
+    let html = App.topBar('通讯录', { search: true, plus: true }) + '<div style="flex:1;overflow-y:auto;background:#fff">';
+    let lastG = '';
+    contacts.forEach((c, i) => {
+      if (c.g !== lastG) { html += '<div class="app-group">' + c.g + '</div>'; lastG = c.g; }
+      html += '<div class="app-row" data-ci="' + i + '"><div class="av">' + c.n.charAt(0) + '</div><div class="bd"><div class="n">' + c.n + '</div><div class="s">' + c.s + '</div></div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    App.bindTop({ onSearch: () => ui.toast('搜索模块待修复', 'error'), onPlus: App.showPlus });
+    body.querySelectorAll('.app-row[data-ci]').forEach(r => {
+      r.onclick = () => {
+        const c = contacts[+r.dataset.ci];
+        if (c.n === 'Ω') ui.toast('加密通讯，请前往聊天', 'ok');
+        else ui.toast('发送失败：你已被对方拉黑', 'error');
+      };
+    });
+  }
+
+  function renderMomentsPage(body) {
+    body.innerHTML =
+      App.topBar('朋友圈', { back: true }) +
+      '<div style="flex:1;overflow-y:auto">' +
+        '<div style="height:200px;background:linear-gradient(135deg,#08C260,#06AD56)"></div>' +
+        '<div style="display:flex;align-items:flex-end;gap:12px;padding:0 14px;margin-top:-30px">' +
+          '<div style="width:64px;height:64px;border-radius:8px;background:#08C260;color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;border:3px solid #fff">Ω</div>' +
+          '<div style="padding-bottom:6px;font-size:16px;font-weight:600">Ω</div>' +
+        '</div>' +
+        '<div style="background:#fff;margin:12px 0;padding:14px;font-size:14px;color:#333">协议已修复。你的选择决定了我的去向。</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchDiscoverView('list') });
+  }
+
+  function renderMe(body) {
+    const acc = S.get('acc') || {};
+    body.innerHTML =
+      App.topBar('我') +
+      '<div class="me-header"><div class="av">' + (acc.nickname ? acc.nickname.charAt(0) : 'Ω') + '</div><div><div class="n">' + (acc.nickname || '修复者') + '</div><div class="s">微信号：' + (acc.phone || 'wxid_omega') + '</div></div></div>' +
+      '<div class="me-list">' +
+        '<div class="app-row"><div class="bd"><div class="n">服务（钱包）</div><div class="s">已解冻</div></div></div>' +
+        '<div class="app-row"><div class="bd"><div class="n">收藏</div><div class="s">已解锁</div></div></div>' +
+        '<div class="app-row" id="goMoments"><div class="bd"><div class="n">朋友圈</div><div class="s">已修复</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">作品</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row"><div class="bd"><div class="n">设置</div><div class="s">管理员</div></div></div>' +
+      '</div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="mAbout"><div class="bd"><div class="n">关于信连</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="mNotes"><div class="bd"><div class="n">Ω 的数学笔记</div></div><div class="arrow">›</div></div>' +
+      '</div>';
+    document.getElementById('goMoments').onclick = () => { App.switchTab('discover'); App.switchDiscoverView('moments'); };
+    document.getElementById('mAbout').onclick = () => location.href = 'about.html?from=stage7';
+    document.getElementById('mNotes').onclick = () => location.href = 'notes.html?from=stage7';
+  }
+
+  function openScan() {
+    const body = document.getElementById('appBody');
+    body.innerHTML =
+      App.topBar('扫一扫', { back: true }) +
+      '<div class="scan-page">' +
+        '<div class="scan-box"><div class="scan-frame" id="scanFrame"><div class="scan-line"></div></div></div>' +
+        '<div class="scan-hint">将二维码放入框内，或双击左上角</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => { App.switchTab('discover'); } });
+    const frame = document.getElementById('scanFrame');
+    frame.onclick = (e) => {
+      const r = frame.getBoundingClientRect();
+      const relX = (e.clientX - r.left) / r.width;
+      const relY = (e.clientY - r.top) / r.height;
+      if (relX < 0.3 && relY < 0.3) {
+        scanHits++;
+        if (scanHits >= 3) {
+          ui.toast('发现隐藏二维码', 'ok');
+          S.set('qrFound', true);
+          setTimeout(loadCalc, 400);
+        } else {
+          ui.toast('角落微光……再试试', 'ok');
+        }
+      } else {
+        scanHits = 0;
+        ui.toast('未识别到二维码', 'error');
+      }
+    };
+  }
+
+  function loadCalc() {
+    calcLoaded = true;
+    const body = document.getElementById('appBody');
+    renderCalc(body);
+  }
+
+  function renderCalc(body) {
+    body.innerHTML =
+      App.topBar('计算器', { back: true }) +
+      '<div class="calc-page">' +
+        '<div class="calc-display" id="calcDisp">0</div>' +
+        '<div class="calc-ops-top">' +
+          '<button id="helpBtn" disabled>?</button>' +
+          '<button id="powBtn" disabled>x^y</button>' +
+          '<button id="clearBtn">C</button>' +
+        '</div>' +
+        '<div class="calc-grid">' +
+          '<button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button data-k="/" class="op">÷</button>' +
+          '<button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button data-k="*" class="op">×</button>' +
+          '<button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="-" class="op">-</button>' +
+          '<button data-k="0">0</button><button data-k=".">.</button><button data-k="=" class="eq">=</button><button data-k="+" class="op">+</button>' +
+        '</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => { App.switchTab('discover'); } });
+
+    document.querySelectorAll('.calc-grid button').forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.k === '=') return doCalc();
+        calcInput += b.dataset.k;
+        updateDisp();
+      };
+    });
+    document.getElementById('clearBtn').onclick = () => { calcInput = ''; updateDisp(); };
+    document.getElementById('helpBtn').onclick = () => {
+      if (scientific) return ui.toast('科学模式已启用', 'ok');
+      if (!helpUnlocked) return ui.toast('数学禁区未突破', 'error');
+      ui.popup('数学禁区', '禁区……是否启用科学模式？', [
+        { t: '取消' },
+        { t: '确认', primary: true, fn: () => {
+          scientific = true;
+          document.getElementById('powBtn').disabled = false;
+          ui.toast('科学模式已启用', 'ok');
+          setTimeout(() => ui.toast('完美的圆周率？（4 舍五入……', 'ok'), 800);
+        }}
+      ]);
+    };
+    document.getElementById('powBtn').onclick = () => {
+      if (!scientific) return ui.toast('科学模式未启用', 'error');
+      calcInput += '^';
+      updateDisp();
+    };
+  }
+
+  function updateDisp() {
+    const d = document.getElementById('calcDisp');
+    if (d) d.textContent = calcInput || '0';
+  }
+
+  function doCalc() {
+    if (!calcInput) return;
+
+    if (!scientific) {
+      if (calcInput === '10/0') {
+        ui.toast('除零错误', 'error');
+        ui.beep(220, 0.1);
+        helpUnlocked = true;
+        document.getElementById('helpBtn').disabled = false;
+        ui.toast('右上角 ? 已亮', 'ok');
+        calcInput = '';
+        updateDisp();
+        return;
+      }
+      ui.toast('10？除数似乎不能为零', 'error');
+      ui.beep(220, 0.1);
+      calcInput = '';
+      updateDisp();
+      return;
+    }
+
+    try {
+      let expr = calcInput.replace(/\^/g, '**');
+      if (!/^[0-9+\-*/.() ]+$/.test(expr.replace(/\*\*/g, ''))) throw new Error('bad');
+      const v = Function('"use strict";return (' + expr + ')')();
+      if (!isFinite(v)) throw new Error('bad');
+      calcInput = String(Math.round(v * 10000) / 10000);
+      updateDisp();
+      if (Math.abs(v - 4.536) < 0.01) {
+        setTimeout(() => openFinalKey(v), 400);
+      }
+    } catch (e) {
+      ui.toast('10？除数似乎不能为零', 'error');
+      ui.beep(220, 0.1);
+      calcInput = '';
+      updateDisp();
+    }
+  }
+
+  function openFinalKey(v) {
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>修复协议 · 最终确认</h3>' +
+        '<div class="tip">请输入最终密钥以完成修复<br>弱提示：黄金与圆周的交点，取其整数。</div>' +
+        '<input id="fkVal" placeholder="输入整数">' +
+        '<button id="fkOk">提交</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    document.getElementById('fkOk').onclick = () => {
+      const s = document.getElementById('fkVal').value.trim();
+      if (!/^\d+$/.test(s)) return ui.toast('仅接受整数', 'error');
+      if (+s === 4) {
+        mask.remove();
+        S.progress(100);
+        S.set('finalKey', 4);
+        setTimeout(startFinal, 500);
+      } else {
+        ui.toast('密钥不匹配。再算一次 1.618^3.1416。', 'error');
+        S.add('errors', 1);
+      }
+    };
+  }
+
+  function startFinal() {
+    const mask = ui.el('div', 'final-mask on');
+    mask.innerHTML =
+      '<div class="omega-txt">' +
+        '你恢复了一切，但你忽略了我的礼物。<br>' +
+        '我留了一个后门，它能让你的软件永远不受任何攻击。<br>' +
+        '保留它，或者删除它——这是你的选择。' +
+      '</div>' +
+      '<div class="choices">' +
+        '<button class="del" id="pickDel">删除后门</button>' +
+        '<button class="keep" id="pickKeep">保留后门</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    document.getElementById('pickDel').onclick = () => endGame(mask, 'delete');
+    document.getElementById('pickKeep').onclick = () => endGame(mask, 'keep');
+  }
+
+  function endGame(mask, choice) {
+    mask.remove();
+    S.set('choice', choice);
+    S.set('stage', 'ending');
+    const line = choice === 'delete'
+      ? '你赢了，但你的纯净让我无趣。再见。'
+      : '哈哈，你果然和我一样疯狂。我在后台等你。';
+    ui.omega(line);
+    setTimeout(() => location.href = 'ending.html', 1600);
+  }
+
+  App.init(document.getElementById('root'), {
+    defaultTab: 'discover',
+    renderOmega, renderGroup, renderFile, renderContacts, renderMomentsPage, renderMe,
+    onScan: openScan
+  });
+
+  setTimeout(() => { App.switchTab('discover'); openScan(); }, 30);
+})();
+</script>
+</body>
+</html>

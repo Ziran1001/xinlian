@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 通讯协议</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  .chat-win { flex:1; display:flex; flex-direction:column; background:#ededed; overflow:hidden; }
+  .chat-msgs { flex:1; overflow-y:auto; padding:12px; }
+  .bubble { max-width:70%; padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:13px; line-height:1.5; word-break:break-all; }
+  .bubble.me { background:#95EC69; margin-left:auto; }
+  .bubble.other { background:#fff; }
+  .bubble.sys { background:transparent; color:#999; text-align:center; font-size:11px; max-width:100%; margin:10px auto; }
+  .chat-input { display:flex; gap:8px; padding:8px; background:#f7f7f7; border-top:1px solid #ddd; flex-shrink:0; }
+  .chat-input input { flex:1; padding:8px 10px; border:0; border-radius:4px; font-size:13px; outline:0; }
+  .chat-input button { padding:8px 16px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; font-size:13px; }
+  .recall { font-size:11px; color:#999; text-align:center; margin:6px 0; cursor:pointer; }
+  .filebox { padding:16px; flex:1; overflow-y:auto; }
+  .filebox .tip { font-size:12px; color:#888; margin-bottom:10px; line-height:1.6; }
+  .filebox input { width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; margin-bottom:10px; }
+  .filebox button { padding:8px 16px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; font-size:13px; }
+  .locked { flex:1; display:flex; align-items:center; justify-content:center; color:#999; font-size:13px; padding:40px; text-align:center; line-height:1.8; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  if (!S.guard('chat')) return;
+
+  const fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233];
+  const recalledTs = '2026-08-10 14:23:45';
+  const fibHash = (ts) => {
+    const ds = ts.replace(/\D/g, '').split('').map(Number);
+    return ds.reduce((s, d, i) => s + d * fib[i % fib.length], 0);
+  };
+  const fibTarget = fibHash(recalledTs);
+
+  const isPrime = (n) => { if (n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
+  const nthPrime = (n) => {
+    const h = ((n % 24) + 24) % 24;
+    if (h === 0) return 2;
+    let c = 0, x = 1;
+    while (c < h) { x++; if (isPrime(x)) c++; }
+    return x;
+  };
+  const deviceName = 'Ω-' + nthPrime(new Date().getHours());
+  const unb64 = (s) => decodeURIComponent(escape(atob(s)));
+
+  let decodeReady = false;
+  let sentB64Tip = false;
+
+  function renderOmega(body) {
+    body.innerHTML =
+      App.topBar('Ω', { back: true, dots: true }) +
+      '<div class="chat-win"><div class="chat-msgs" id="msgs"></div>' +
+        '<div class="chat-input"><input id="inp" placeholder="输入消息"><button id="send">发送</button></div></div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+    const msgs = document.getElementById('msgs');
+    msgs.innerHTML = '';
+    addBubble(msgs, '你终于来了。消息被我编码了。', 'other');
+    addBubble(msgs, '【/decode】', 'other');
+    addBubble(msgs, '%&*#@%&*#@%&*#@', 'other');
+    const rc = document.createElement('div');
+    rc.className = 'recall';
+    rc.textContent = '你撤回了一条消息 · ' + recalledTs;
+    msgs.appendChild(rc);
+    rc.onclick = () => ui.toast('撤回时间戳：' + recalledTs);
+    decodeReady = true;
+    document.getElementById('send').onclick = () => sendOmega(msgs);
+    document.getElementById('inp').onkeydown = (e) => { if (e.key === 'Enter') sendOmega(msgs); };
+  }
+
+  function addBubble(msgs, txt, who) {
+    const b = document.createElement('div');
+    b.className = 'bubble ' + (who || 'other');
+    b.textContent = txt;
+    msgs.appendChild(b);
+    msgs.scrollTop = msgs.scrollHeight;
+    return b;
+  }
+
+  function sendOmega(msgs) {
+    const inp = document.getElementById('inp');
+    const raw = inp.value;
+    if (!raw.trim()) { Notes.hit('Ω-03'); return ui.toast('空消息已发送', 'error'); }
+    inp.value = '';
+    if (raw === '/decode') {
+      if (!decodeReady) return ui.toast('没有可解码内容', 'error');
+      S.set('decoded', true);
+      addBubble(msgs, 'Fibonacci = 1,1,2,3,5… 你会在钱包中找到答案。', 'other');
+      ui.toast('解码成功', 'ok');
+      return;
+    }
+    if (/^\[B64\].+\[B64\]$/.test(raw)) {
+      const core = raw.slice(5, -5);
+      try {
+        const text = unb64(core);
+        addBubble(msgs, raw, 'me');
+        addBubble(msgs, '解码：' + text, 'sys');
+      } catch (e) {
+        addBubble(msgs, raw, 'me');
+        ui.toast('Base64 内容非法', 'error');
+        S.add('errors', 1);
+      }
+      return;
+    }
+    addBubble(msgs, raw, 'me');
+    addBubble(msgs, '格式错误，请使用 [B64]...[B64] 包裹后再发送', 'sys');
+    ui.beep(220, 0.08);
+    S.add('errors', 1);
+    if (!sentB64Tip) {
+      sentB64Tip = true;
+      ui.popup('Ω 的提示', '要发送消息，请先将内容进行 Base64 编码，再用 [B64] 包裹。<br>例如：<code>[B64]aGVsbG8=[B64]</code>', [{ t: '知道了', primary: true }]);
+    }
+  }
+
+  function renderGroup(body) {
+    body.innerHTML =
+      App.topBar('修复者联盟', { back: true, dots: true }) +
+      '<div class="chat-win"><div class="chat-msgs" id="msgs">' +
+        (S.get('groupDone')
+          ? '<div class="bubble sys">暗号正确，禁言已解除</div>'
+          : '<div class="bubble sys">本群已被禁言，需输入暗号解除</div><div class="bubble sys">暗号是什么？或许去「我」看看？</div>') +
+      '</div>' +
+      (S.get('groupDone') ? '' : '<div class="chat-input"><input id="inp" placeholder="输入暗号"><button id="send">解除</button></div>') +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+    if (S.get('groupDone')) return;
+    document.getElementById('send').onclick = () => sendGroup();
+    document.getElementById('inp').onkeydown = (e) => { if (e.key === 'Enter') sendGroup(); };
+  }
+
+  function sendGroup() {
+    const v = document.getElementById('inp').value.trim();
+    if (!v) return;
+    if (v === deviceName.slice(2)) {
+      S.set('groupDone', true);
+      ui.toast('禁言已解除', 'ok');
+      App.rerender();
+      checkStage();
+    } else {
+      ui.toast('暗号错误', 'error');
+      S.add('errors', 1);
+    }
+  }
+
+  function renderFile(body) {
+    body.innerHTML =
+      App.topBar('文件驿站', { back: true, dots: true }) +
+      '<div class="filebox">' +
+        '<div class="tip">搜索撤回文件<br>线索：撤回时间戳 ' + recalledTs + '<br>算法：逐位数字 × 斐波那契数列对应项，求和</div>' +
+        '<input id="fq" placeholder="输入斐波那契哈希">' +
+        '<button id="fs">搜索</button>' +
+        '<div id="fres" style="margin-top:14px;font-size:13px">' + (S.get('foundRecall') ? '<div style="color:#08C260">已找回：撤回消息备份.txt</div>' : '') + '</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+    document.getElementById('fs').onclick = () => {
+      const q = +document.getElementById('fq').value;
+      const res = document.getElementById('fres');
+      if (q === fibTarget) {
+        res.innerHTML = '<div style="color:#08C260">已找回：撤回消息备份.txt</div>';
+        ui.toast('找回成功', 'ok');
+        S.set('foundRecall', true);
+        checkStage();
+      } else {
+        res.innerHTML = '<div style="color:#c33">未找到匹配文件（再检查时间戳逐位 × 斐波那契）</div>';
+        S.add('errors', 1);
+      }
+    };
+  }
+
+  const contacts = [
+    { g: 'A', n: 'Ω', s: '加密通讯' },
+    { g: 'A', n: '阿黑', s: '已拉黑' },
+    { g: 'B', n: '被拉黑的人', s: '已被拉黑' },
+    { g: 'C', n: '残页', s: '已拉黑' },
+    { g: 'D', n: '数据包', s: '已拉黑' },
+    { g: 'F', n: '斐波那契', s: '已拉黑' },
+    { g: 'G', n: '黄金分割', s: '已拉黑' },
+    { g: 'H', n: '黑客Ω', s: '已拉黑' },
+    { g: 'J', n: '镜像', s: '已拉黑' },
+    { g: 'M', n: '密码', s: '已拉黑' },
+    { g: 'Q', n: '钱包', s: '已拉黑' },
+    { g: 'S', n: '数字根', s: '已拉黑' },
+    { g: 'W', n: '文件驿站', s: '已拉黑' },
+    { g: 'X', n: '修复协议', s: '已拉黑' },
+    { g: 'Y', n: '验证码', s: '已拉黑' }
+  ];
+  function renderContacts(body) {
+    let html = App.topBar('通讯录', { search: true, plus: true }) + '<div style="flex:1;overflow-y:auto;background:#fff">';
+    let lastG = '';
+    contacts.forEach((c, i) => {
+      if (c.g !== lastG) { html += '<div class="app-group">' + c.g + '</div>'; lastG = c.g; }
+      html += '<div class="app-row" data-ci="' + i + '"><div class="av">' + c.n.charAt(0) + '</div><div class="bd"><div class="n">' + c.n + '</div><div class="s">' + c.s + '</div></div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    App.bindTop({ onSearch: () => ui.toast('搜索模块待修复', 'error'), onPlus: App.showPlus });
+    body.querySelectorAll('.app-row[data-ci]').forEach(r => {
+      r.onclick = () => {
+        const c = contacts[+r.dataset.ci];
+        if (c.n === 'Ω') ui.toast('加密通讯，请前往聊天', 'ok');
+        else ui.toast('发送失败：你已被对方拉黑', 'error');
+      };
+    });
+  }
+
+  function renderMomentsPage(body) {
+    if (!S.get('groupDone') || !S.get('foundRecall')) {
+      body.innerHTML = App.topBar('朋友圈', { back: true }) + '<div class="locked">待修复</div>';
+      App.bindTop({ onBack: () => App.switchDiscoverView('list') });
+      return;
+    }
+    S.unlock('moments');
+    body.innerHTML = App.topBar('朋友圈', { back: true }) + '<div class="locked">朋友圈已解锁</div>';
+    App.bindTop({ onBack: () => App.switchDiscoverView('list') });
+  }
+
+  function renderMe(body) {
+    const acc = S.get('acc') || {};
+    const ready = S.get('groupDone') && S.get('foundRecall');
+    body.innerHTML =
+      App.topBar('我') +
+      '<div class="me-header"><div class="av">' + (acc.nickname ? acc.nickname.charAt(0) : 'Ω') + '</div><div><div class="n">' + (acc.nickname || '修复者') + '</div><div class="s">微信号：' + (acc.phone || 'wxid_omega') + '</div></div></div>' +
+      '<div class="me-list">' +
+        '<div class="app-row"><div class="bd"><div class="n">设备名称</div><div class="s">' + deviceName + '</div></div></div>' +
+      '</div>' +
+      '<div class="me-list">' +
+        '<div class="app-row' + (ready ? '' : ' disabled') + '"><div class="bd"><div class="n">服务（钱包）</div><div class="s">' + (ready ? '冻结' : '待修复') + '</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">收藏</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">朋友圈</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">作品</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">设置</div><div class="s">待修复</div></div></div>' +
+      '</div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="mAbout"><div class="bd"><div class="n">关于信连</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="mNotes"><div class="bd"><div class="n">Ω 的数学笔记</div></div><div class="arrow">›</div></div>' +
+      '</div>';
+    document.getElementById('mAbout').onclick = () => location.href = 'about.html?from=stage2';
+    document.getElementById('mNotes').onclick = () => location.href = 'notes.html?from=stage2';
+  }
+
+  function checkStage() {
+    if (S.get('groupDone') && S.get('foundRecall') && !S.get('stage2Done')) {
+      S.set('stage2Done', true);
+      S.unlock('moments');
+      S.unlock('wallet');
+      S.progress(30);
+      ui.omega('你解了我的码，但我的斐波那契还没完。');
+      setTimeout(() => {
+        ui.popup('阶段完成', '聊天已恢复。<br>朋友圈与「我」已解锁。<br>修复进度 30%', [{
+          t: '前往朋友圈', primary: true, fn: () => {
+            S.set('stage', 'stage3');
+            location.href = 'stage3.html';
+          }
+        }]);
+      }, 600);
+    }
+  }
+
+  App.init(document.getElementById('root'), {
+    defaultTab: 'chat',
+    renderOmega, renderGroup, renderFile, renderContacts, renderMomentsPage, renderMe,
+    onScan: () => ui.toast('扫一扫模块待修复', 'error')
+  });
+})();
+</script>
+</body>
+</html>

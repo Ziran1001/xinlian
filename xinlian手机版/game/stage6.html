@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 设置</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  .dev-panel { margin:14px; padding:16px; background:#1a1a1a; border-radius:8px; border-left:3px solid #ff3b3b; }
+  .dev-panel .hint { color:#ff3b3b; font-size:11px; margin-bottom:10px; font-family:Consolas,monospace; }
+  .dev-panel .ghost { color:#555; font-size:16px; letter-spacing:8px; font-family:Consolas,monospace; margin-bottom:10px; }
+  .sw-row { display:flex; gap:10px; justify-content:center; margin:10px 0; }
+  .sw { width:56px; height:32px; border-radius:16px; background:#444; position:relative; cursor:pointer; transition:background .2s; }
+  .sw.on { background:#08C260; }
+  .sw::after { content:''; position:absolute; top:3px; left:3px; width:26px; height:26px; border-radius:50%; background:#fff; transition:left .2s; }
+  .sw.on::after { left:27px; }
+  .sw-lbl { display:flex; gap:10px; justify-content:center; font-family:Consolas,monospace; color:#ff3b3b; font-size:14px; }
+  .sw-lbl span { width:56px; text-align:center; }
+  .lang-row { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#fff; border-bottom:1px solid #f0f0f0; }
+  .lang-row select { padding:6px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px; }
+  .lang-row.disabled { opacity:.45; pointer-events:none; }
+  .feedback-bar { padding:14px; }
+  .feedback-bar button { width:100%; padding:12px; background:#08C260; color:#fff; border:0; border-radius:6px; font-size:15px; cursor:pointer; }
+  .panel { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+  .panel.on { display:flex; }
+  .panel .box { background:#fff; padding:20px; border-radius:8px; width:340px; }
+  .panel .box h3 { font-size:15px; margin-bottom:12px; }
+  .panel .box input { width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; margin:10px 0; }
+  .panel .box button { width:100%; padding:9px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; }
+  .panel .box .tip { font-size:11px; color:#888; line-height:1.6; }
+  .evt-mask { position:fixed; inset:0; background:rgba(60,0,0,.75); z-index:9000; display:none; }
+  .evt-mask.on { display:block; }
+  .evt-banner { position:absolute; top:0; left:0; right:0; padding:12px; background:#a00; color:#fff; font-family:Consolas,monospace; font-size:13px; text-align:center; letter-spacing:1px; }
+  .evt-hint { position:absolute; bottom:20px; left:0; right:0; text-align:center; color:#ffd; font-size:12px; font-family:Consolas,monospace; }
+  .pkt { position:fixed; width:56px; height:56px; background:radial-gradient(circle,#ff5555,#a00); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:24px; font-weight:bold; cursor:pointer; z-index:9100; box-shadow:0 0 18px rgba(255,0,0,.8); pointer-events:auto; font-family:Consolas,monospace; }
+  .evt-hit { position:fixed; inset:0; background:rgba(8,194,96,.25); z-index:9050; pointer-events:none; opacity:0; transition:opacity .15s; }
+  .evt-hit.on { opacity:1; }
+  .evt-shake { animation:evtShake .5s; }
+  @keyframes evtShake {
+    0%,100% { transform:translateX(0); }
+    20% { transform:translateX(-8px); }
+    40% { transform:translateX(8px); }
+    60% { transform:translateX(-6px); }
+    80% { transform:translateX(6px); }
+  }
+  .about-split { display:flex; align-items:center; padding:12px 14px; background:#fff; border-bottom:1px solid #f0f0f0; font-size:14px; }
+  .about-split .lbl { flex:1; cursor:pointer; }
+  .about-split .ver { cursor:pointer; color:#999; font-size:12px; display:flex; align-items:center; gap:4px; }
+  .about-split .ver .dot { color:#ff3b3b; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  if (!S.guard('settings')) return;
+
+  let aboutClicks = S.get('aboutClicks') || 0;
+  let devUnlocked = !!S.get('devUnlocked');
+  let seq = [0, 0, 0, 0];
+  let langUnlocked = !!S.get('langUnlocked');
+  let admin = !!S.get('admin');
+
+  const SEQ = [1, 0, 1, 0];
+
+  function renderOmega(body) {
+    body.innerHTML = App.topBar('Ω', { back: true, dots: true }) + '<div class="app-empty">加密通讯</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderGroup(body) {
+    body.innerHTML = App.topBar('修复者联盟', { back: true, dots: true }) + '<div class="app-empty">群聊已解禁</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderFile(body) {
+    body.innerHTML = App.topBar('文件驿站', { back: true, dots: true }) + '<div class="app-empty">已恢复</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+
+  const contacts = [
+    { g: 'A', n: 'Ω', s: '加密通讯' },
+    { g: 'A', n: '阿黑', s: '已拉黑' },
+    { g: 'B', n: '被拉黑的人', s: '已被拉黑' },
+    { g: 'C', n: '残页', s: '已拉黑' },
+    { g: 'D', n: '数据包', s: '已拉黑' },
+    { g: 'F', n: '斐波那契', s: '已拉黑' },
+    { g: 'G', n: '黄金分割', s: '已拉黑' },
+    { g: 'H', n: '黑客Ω', s: '已拉黑' },
+    { g: 'J', n: '镜像', s: '已拉黑' },
+    { g: 'M', n: '密码', s: '已拉黑' },
+    { g: 'Q', n: '钱包', s: '已拉黑' },
+    { g: 'S', n: '数字根', s: '已拉黑' },
+    { g: 'W', n: '文件驿站', s: '已拉黑' },
+    { g: 'X', n: '修复协议', s: '已拉黑' },
+    { g: 'Y', n: '验证码', s: '已拉黑' }
+  ];
+  function renderContacts(body) {
+    let html = App.topBar('通讯录', { search: true, plus: true }) + '<div style="flex:1;overflow-y:auto;background:#fff">';
+    let lastG = '';
+    contacts.forEach((c, i) => {
+      if (c.g !== lastG) { html += '<div class="app-group">' + c.g + '</div>'; lastG = c.g; }
+      html += '<div class="app-row" data-ci="' + i + '"><div class="av">' + c.n.charAt(0) + '</div><div class="bd"><div class="n">' + c.n + '</div><div class="s">' + c.s + '</div></div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    App.bindTop({ onSearch: () => ui.toast('搜索模块待修复', 'error'), onPlus: App.showPlus });
+    body.querySelectorAll('.app-row[data-ci]').forEach(r => {
+      r.onclick = () => {
+        const c = contacts[+r.dataset.ci];
+        if (c.n === 'Ω') ui.toast('加密通讯，请前往聊天', 'ok');
+        else ui.toast('发送失败：你已被对方拉黑', 'error');
+      };
+    });
+  }
+
+  function renderMomentsPage(body) {
+    body.innerHTML =
+      App.topBar('朋友圈', { back: true }) +
+      '<div style="flex:1;overflow-y:auto">' +
+        '<div style="height:200px;background:linear-gradient(135deg,#08C260,#06AD56)"></div>' +
+        '<div style="display:flex;align-items:flex-end;gap:12px;padding:0 14px;margin-top:-30px">' +
+          '<div style="width:64px;height:64px;border-radius:8px;background:#08C260;color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;border:3px solid #fff">Ω</div>' +
+          '<div style="padding-bottom:6px;font-size:16px;font-weight:600">Ω</div>' +
+        '</div>' +
+        '<div style="background:#fff;margin:12px 0;padding:14px;font-size:14px;color:#333">协议已修复。你的选择决定了我的去向。</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchDiscoverView('list') });
+  }
+
+  function renderMe(body) {
+    const acc = S.get('acc') || {};
+    body.innerHTML =
+      App.topBar('我') +
+      '<div class="me-header"><div class="av">' + (acc.nickname ? acc.nickname.charAt(0) : 'Ω') + '</div><div><div class="n">' + (acc.nickname || '修复者') + '</div><div class="s">微信号：' + (acc.phone || 'wxid_omega') + '</div></div></div>' +
+      '<div class="me-list">' +
+        '<div class="app-row"><div class="bd"><div class="n">服务（钱包）</div><div class="s">已解冻</div></div></div>' +
+        '<div class="app-row"><div class="bd"><div class="n">收藏</div><div class="s">已解锁</div></div></div>' +
+        '<div class="app-row" id="goMoments"><div class="bd"><div class="n">朋友圈</div><div class="s">已修复</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">作品</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row" id="goSet"><div class="bd"><div class="n">设置</div><div class="s">' + (admin ? '管理员' : '') + '</div></div><div class="arrow">›</div></div>' +
+      '</div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="mAbout"><div class="bd"><div class="n">关于信连</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="mNotes"><div class="bd"><div class="n">Ω 的数学笔记</div></div><div class="arrow">›</div></div>' +
+      '</div>';
+    document.getElementById('goMoments').onclick = () => { App.switchTab('discover'); App.switchDiscoverView('moments'); };
+    document.getElementById('goSet').onclick = () => App.switchMeView('settings');
+    document.getElementById('mAbout').onclick = () => location.href = 'about.html?from=stage6';
+    document.getElementById('mNotes').onclick = () => location.href = 'notes.html?from=stage6';
+  }
+
+  function renderWallet(body) {
+    body.innerHTML =
+      App.topBar('服务', { back: true }) +
+      '<div style="padding:20px 14px;background:linear-gradient(135deg,#08C260,#06AD56);color:#fff;margin-bottom:10px">' +
+        '<div style="font-size:12px;opacity:.8">余额</div>' +
+        '<div style="font-size:28px;font-weight:600;margin-top:6px">¥ 0.01</div>' +
+      '</div>' +
+      '<div style="padding:20px;text-align:center;color:#999;font-size:13px">账单已恢复</div>';
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+  }
+
+  function renderFav(body) {
+    body.innerHTML =
+      App.topBar('收藏', { back: true }) +
+      '<div style="margin:14px;padding:20px;background:#1a1a1a;color:#ddd;border-radius:8px;font-family:Consolas,monospace;border-left:3px solid #ff3b3b">' +
+        '<div style="color:#ff3b3b;font-size:11px;margin-bottom:8px">Ω-收藏-01</div>' +
+        '<div style="font-size:13px;line-height:1.8">我的核心密钥藏在文件驿站。<br>发送附件时，别忘了伪装。</div>' +
+      '</div>';
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+  }
+
+  function renderSettings(body) {
+    let html = App.topBar('设置', { back: true });
+
+    html += '<div class="me-list">';
+    html += '<div class="app-row disabled"><div class="bd"><div class="n">账号与安全</div></div></div>';
+    html += '<div class="app-row disabled"><div class="bd"><div class="n">隐私</div></div></div>';
+    html += '<div class="app-row disabled"><div class="bd"><div class="n">通用</div></div></div>';
+    html += '</div>';
+
+    html += '<div class="me-list">';
+    html += '<div class="about-split">' +
+      '<div class="lbl" id="aboutLbl">关于信连</div>' +
+      '<div class="ver" id="aboutVer">8.0.43' + (aboutClicks >= 5 && aboutClicks < 10 ? '<span class="dot">.</span>' : '') + ' ›</div>' +
+      '</div>';
+    html += '</div>';
+
+    if (devUnlocked) {
+      html += '<div class="dev-panel">' +
+        '<div class="hint">Ω: 我数到十，你数到四。</div>' +
+        '<div class="ghost">1010</div>' +
+        '<div class="sw-row" id="swRow">' +
+          [0,1,2,3].map(i => '<div class="sw' + (seq[i] === 1 ? ' on' : '') + '" data-si="' + i + '"></div>').join('') +
+        '</div>' +
+        '<div class="sw-lbl" id="swLbl">' +
+          [0,1,2,3].map(i => '<span>' + seq[i] + '</span>').join('') +
+        '</div>' +
+      '</div>';
+    }
+
+    html += '<div class="me-list">';
+    html += '<div class="lang-row ' + (langUnlocked ? '' : 'disabled') + '">' +
+      '<span>多语言</span>' +
+      '<select id="langSel"><option value="zh">简体中文</option><option value="tw">繁体中文</option></select>' +
+      '</div>';
+    html += '</div>';
+
+    if (langUnlocked && S.get('langSet') === 'tw') {
+      html += '<div class="feedback-bar"><button id="feedbackBtn">反馈</button></div>';
+    }
+
+    body.innerHTML = html;
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+    body.querySelectorAll('.app-row.disabled').forEach(r => {
+      r.onclick = () => ui.toast('该模块仍被锁定', 'error');
+    });
+
+    document.getElementById('aboutLbl').onclick = () => {
+      aboutClicks++;
+      S.set('aboutClicks', aboutClicks);
+      if (aboutClicks >= 10 && !devUnlocked) {
+        devUnlocked = true;
+        S.set('devUnlocked', true);
+        seq = [0, 0, 0, 0];
+        ui.toast('你数得真准。1010₂。', 'ok');
+        App.rerender();
+      } else if (aboutClicks >= 10) {
+        ui.toast('开发者选项已解锁', 'ok');
+      } else {
+        ui.toast('关于信连？', 'ok');
+        App.rerender();
+      }
+    };
+
+    document.getElementById('aboutVer').onclick = () => {
+      location.href = 'about.html?from=stage6';
+    };
+
+    if (devUnlocked) {
+      document.querySelectorAll('.sw[data-si]').forEach(s => {
+        s.onclick = () => {
+          const i = +s.dataset.si;
+          seq[i] = seq[i] === 1 ? 0 : 1;
+          s.classList.toggle('on', seq[i] === 1);
+          document.getElementById('swLbl').innerHTML = [0,1,2,3].map(k =>
+            '<span>' + seq[k] + '</span>'
+          ).join('');
+          if (seq.every((v, k) => v === SEQ[k])) {
+            langUnlocked = true;
+            S.set('langUnlocked', true);
+            ui.toast('多语言已解锁', 'ok');
+            App.rerender();
+          }
+        };
+      });
+    }
+
+    const langSel = document.getElementById('langSel');
+    if (langSel && langUnlocked) {
+      if (S.get('langSet') === 'tw') langSel.value = 'tw';
+      langSel.onchange = () => {
+        S.set('langSet', langSel.value);
+        if (langSel.value === 'tw') {
+          ui.toast('已切换到繁体中文', 'ok');
+          App.rerender();
+        }
+      };
+    }
+
+    const fb = document.getElementById('feedbackBtn');
+    if (fb) fb.onclick = openFeedback;
+  }
+
+  function openFeedback() {
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>反馈</h3>' +
+        '<div class="tip">输入当前系统时间的二进制表示（仅小时，去前导零）<br>例：14 时 → 1110</div>' +
+        '<input id="fbVal" placeholder="输入二进制">' +
+        '<button id="fbOk">提交</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    document.getElementById('fbOk').onclick = () => {
+      const v = document.getElementById('fbVal').value.trim();
+      if (!/^[01]+$/.test(v)) {
+        ui.toast('仅接受二进制字符', 'error');
+        return;
+      }
+      const hour = new Date().getHours();
+      const bin = hour.toString(2);
+      if (v === bin || v === bin + '₂') {
+        mask.remove();
+        admin = true;
+        S.set('admin', true);
+        ui.toast('管理员权限已获取', 'ok');
+        setTimeout(startSecondEvent, 500);
+      } else {
+        ui.toast('小时不对。看看屏幕右下角。', 'error');
+        S.add('errors', 1);
+      }
+    };
+  }
+
+  function startSecondEvent() {
+    const mask = ui.el('div', 'evt-mask on');
+    mask.innerHTML =
+      '<div class="evt-banner" id="evtBanner">你拿走了权限，但我还留了尾巴！</div>' +
+      '<div class="evt-hint">点击红色数据包，拦截 2 次</div>';
+    document.body.appendChild(mask);
+    typeBanner('你拿走了权限，但我还留了尾巴！', 900, () => spawnPacket(mask, 0));
+  }
+
+  function typeBanner(text, dur, cb) {
+    const b = document.getElementById('evtBanner');
+    let i = 0;
+    const t = setInterval(() => {
+      b.textContent = text.slice(0, i);
+      i++;
+      if (i > text.length) { clearInterval(t); setTimeout(cb, dur); }
+    }, 40);
+  }
+
+  function spawnPacket(mask, hits) {
+    if (hits >= 2) return endEventSuccess(mask);
+    const pkt = document.createElement('div');
+    pkt.className = 'pkt';
+    pkt.textContent = 'Ω';
+    document.body.appendChild(pkt);
+
+    const W = window.innerWidth, H = window.innerHeight;
+    const M = 30;
+    const pts = [];
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) pts.push({ x: M + (W - 2 * M) * i / steps, y: M });
+    for (let i = 0; i <= steps; i++) pts.push({ x: W - M, y: M + (H - 2 * M) * i / steps });
+    for (let i = 0; i <= steps; i++) pts.push({ x: W - M - (W - 2 * M) * i / steps, y: H - M });
+    for (let i = 0; i <= steps; i++) pts.push({ x: M, y: H - M - (H - 2 * M) * i / steps });
+
+    let seg = 0, segT = 0;
+    const speed = 2.5;
+    let raf = null, timer = null;
+
+    function tick() {
+      segT += 0.012 * speed;
+      if (segT >= 1) { segT = 0; seg++; if (seg >= pts.length - 1) seg = 0; }
+      const a = pts[seg], b = pts[seg + 1] || pts[0];
+      pkt.style.left = (a.x + (b.x - a.x) * segT - 28) + 'px';
+      pkt.style.top = (a.y + (b.y - a.y) * segT - 28) + 'px';
+      raf = requestAnimationFrame(tick);
+    }
+    tick();
+
+    timer = setTimeout(() => {
+      cancelAnimationFrame(raf);
+      pkt.remove();
+      ui.toast('回滚 5%', 'error');
+      S.add('errors', 1);
+      S.progress(Math.max(0, S.get('progress') - 5));
+      document.body.classList.add('evt-shake');
+      setTimeout(() => document.body.classList.remove('evt-shake'), 500);
+      mask.remove();
+      document.querySelectorAll('.pkt').forEach(p => p.remove());
+      S.set('admin', false);
+      admin = false;
+      S.set('langSet', '');
+      langUnlocked = false;
+      S.set('langUnlocked', false);
+      S.set('devUnlocked', false);
+      devUnlocked = false;
+      S.set('aboutClicks', 0);
+      aboutClicks = 0;
+      seq = [0, 0, 0, 0];
+      ui.toast('尾巴没抓住，重走语言切换流程', 'error');
+      App.switchMeView('settings');
+    }, 2500);
+
+    pkt.onclick = () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+      pkt.remove();
+      const hit = ui.el('div', 'evt-hit on');
+      document.body.appendChild(hit);
+      ui.beep(880, 0.1, 'square', 0.08);
+      setTimeout(() => hit.remove(), 150);
+      spawnPacket(mask, hits + 1);
+    };
+  }
+
+  function endEventSuccess(mask) {
+    mask.remove();
+    document.querySelectorAll('.pkt').forEach(p => p.remove());
+    S.set('stage6Done', true);
+    S.set('frag', true);
+    S.unlock('app');
+    S.progress(92);
+    ui.omega('你进入了我的后台，但你还没看到我的核心。');
+    ui.toast('获得 Ω 的密文碎片', 'ok');
+    setTimeout(() => {
+      ui.popup('阶段完成', '设置已解锁。<br>修复进度 92%', [{
+        t: '前往轻应用', primary: true, fn: () => {
+          S.set('stage', 'stage7');
+          location.href = 'stage7.html';
+        }
+      }]);
+    }, 600);
+  }
+
+  App.init(document.getElementById('root'), {
+    defaultTab: 'me',
+    renderOmega, renderGroup, renderFile, renderContacts, renderMomentsPage,
+    renderMe, renderWallet, renderFav, renderSettings,
+    onScan: () => ui.toast('扫一扫模块待修复', 'error')
+  });
+
+  setTimeout(() => App.switchMeView('settings'), 30);
+})();
+</script>
+</body>
+</html>

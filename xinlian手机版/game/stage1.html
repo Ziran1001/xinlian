@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 重建身份</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  .wrap { max-width:420px; margin:0 auto; min-height:100vh; background:#fff; }
+  .top { background:#2A2A2A; color:#fff; padding:14px; display:flex; align-items:center; justify-content:space-between; font-size:16px; }
+  .top .back { font-size:20px; cursor:pointer; width:24px; }
+  .top .name { flex:1; text-align:center; }
+  .field { display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid #f0f0f0; font-size:14px; }
+  .field label { width:70px; color:#666; flex-shrink:0; }
+  .field input, .field select { flex:1; border:0; outline:0; font-size:14px; background:transparent; }
+  .submit { margin:20px 16px; }
+  .submit button { width:100%; padding:12px; background:#08C260; color:#fff; border:0; border-radius:6px; font-size:15px; cursor:pointer; }
+  .cap-row { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid #f0f0f0; }
+  .cap-row label { width:70px; color:#666; flex-shrink:0; }
+  .cap-row input { flex:1; border:0; outline:0; font-size:14px; }
+  .cap-img { background:#eee; padding:6px 12px; border-radius:4px; font-size:18px; letter-spacing:6px; position:relative; }
+  .cap-img.blur span { filter:blur(4px); }
+  .cap-img.blur::after { content:''; position:absolute; inset:0; background:repeating-linear-gradient(45deg,rgba(0,0,0,.08) 0 2px,transparent 2px 4px); border-radius:4px; }
+  .cap-img.rot span { transform:rotate(180deg); display:inline-block; }
+  .tools { padding:8px 16px; font-size:12px; display:flex; gap:12px; flex-wrap:wrap; }
+  .tool-btn { background:none; border:0; color:#08C260; font-size:12px; cursor:pointer; padding:0; }
+  .clock { font-size:11px; color:#999; padding:0 16px 8px; }
+  .about-link { background:none; border:0; font-size:11px; color:#08C260; cursor:pointer; padding:0 16px 8px; display:inline-block; }
+  #qr-box { text-align:center; }
+  #qr-hint { padding:16px; text-align:center; color:#888; font-size:12px; }
+  .choose { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:16px; }
+  .choose button { width:260px; padding:13px; border-radius:6px; font-size:15px; cursor:pointer; border:1px solid #08C260; background:#fff; color:#08C260; }
+  .choose button.primary { background:#08C260; color:#fff; }
+  .agree-row { display:flex; align-items:center; gap:8px; padding:10px 16px; font-size:12px; color:#666; }
+  .agree-row input[type=checkbox] { width:16px; height:16px; accent-color:#08C260; cursor:pointer; }
+  .agree-row .link { color:#08C260; cursor:pointer; text-decoration:underline; }
+  @media (max-width:600px) {
+    .field input, .field select, .cap-row input { font-size:16px; }
+    .submit button { padding:14px; font-size:16px; }
+    .choose button { width:80vw; padding:15px; font-size:16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="back" id="back" style="visibility:hidden">‹</div>
+    <div class="name" id="topName">信连</div>
+    <div style="width:24px"></div>
+  </div>
+  <div id="pane"></div>
+  <div class="tools" id="tools">
+    <button class="tool-btn" id="rotateBtn">屏幕旋转 180°</button>
+    <button class="tool-btn" id="noteBtn">Ω 的数学笔记</button>
+  </div>
+  <div class="submit" id="submitWrap"><button id="submit">提交</button></div>
+</div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script>
+const now = new Date();
+const minute = now.getMinutes();
+const hour = now.getHours();
+const ver = '8.0.43';
+const verDR = 6;
+
+const dr = (n) => { while (n > 9) n = String(n).split('').reduce((a, b) => a + +b, 0); return n; };
+const isPrime = (n) => { if (n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
+const minPrimes = (m) => {
+  const r = [];
+  for (let i = 2; i <= m; i++) if (m % i === 0 && isPrime(i)) r.push(i);
+  return r;
+};
+const forbid = minPrimes(minute);
+const cnMap = { 2: '二', 7: '七', 3: '三', 5: '五' };
+
+let state = { customGender: false, hiddenRegion: false, rotated: false };
+let maleClick = 0, capErr = 0, mode = 'choose';
+let qrTimer = null, loginCheck = null;
+
+const pane = document.getElementById('pane');
+const topName = document.getElementById('topName');
+const back = document.getElementById('back');
+const tools = document.getElementById('tools');
+const submitWrap = document.getElementById('submitWrap');
+
+function row(label, inner) {
+  return '<div class="field"><label>' + label + '</label>' + inner + '</div>';
+}
+
+function fail(msg, field) {
+  S.add('errors', 1);
+  ui.toast(msg, 'error');
+  ui.beep(220, 0.1);
+  if (field === 'phone' && !S.get('taught')) {
+    S.set('taught', true);
+    ui.popup('Ω 的数学笔记·残页 1',
+      '数字根：把数字每一位相加，直到变成一位数。<br>例：8.0.43 → 8+0+4+3 = 15 → 1+5 = 6',
+      [{ t: '记下了', primary: true }]);
+  }
+}
+
+const DRAFT_KEY = 'xinlian_draft';
+function saveDraft() {
+  const d = {
+    phone: (document.getElementById('f-phone') || {}).value || '',
+    nick: (document.getElementById('f-nick') || {}).value || '',
+    pwd: (document.getElementById('f-pwd') || {}).value || '',
+    gender: (document.getElementById('f-gender') || {}).value || '',
+    cg: (document.getElementById('f-cg') || {}).value || '',
+    region: (document.getElementById('f-region') || {}).value || '',
+    cap: (document.getElementById('f-cap') || {}).value || '',
+    agreed: (document.getElementById('agreeChk') || {}).checked || false,
+    rotated: state.rotated,
+    customGender: state.customGender
+  };
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+}
+function loadDraft() {
+  try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || null; }
+  catch (e) { return null; }
+}
+function clearDraft() { sessionStorage.removeItem(DRAFT_KEY); }
+
+function renderChoose() {
+  mode = 'choose';
+  topName.textContent = '信连';
+  back.style.visibility = 'hidden';
+  tools.style.display = 'none';
+  submitWrap.style.display = 'none';
+  pane.innerHTML =
+    '<div class="choose">' +
+      '<button class="primary" id="goReg">注册新账号</button>' +
+      '<button id="goLogin">已有账号？登录</button>' +
+    '</div>';
+  document.getElementById('goReg').onclick = () => { clearDraft(); renderReg(); };
+  document.getElementById('goLogin').onclick = () => { clearDraft(); renderLogin(); };
+}
+
+function renderReg() {
+  mode = 'reg';
+  topName.textContent = '注册 · 信连';
+  back.style.visibility = 'visible';
+  back.onclick = renderChoose;
+  tools.style.display = 'flex';
+  submitWrap.style.display = 'block';
+  const d = loadDraft();
+  state.rotated = d ? !!d.rotated : false;
+  state.customGender = d ? !!d.customGender : false;
+  pane.innerHTML =
+    row('手机号', '<input id="f-phone" placeholder="手机号" value="' + (d ? d.phone : '') + '">') +
+    row('昵称', '<input id="f-nick" placeholder="昵称" value="' + (d ? d.nick : '') + '">') +
+    row('密码', '<input id="f-pwd" placeholder="密码" value="' + (d ? d.pwd : '') + '">') +
+    row('性别', '<select id="f-gender"><option value="">选择</option><option' + (d && d.gender === '男' ? ' selected' : '') + '>男</option><option' + (d && d.gender === '女' ? ' selected' : '') + '>女</option><option value="other"' + (d && d.gender === 'other' ? ' selected' : '') + '>其他</option></select>') +
+    '<div id="custom-gender-box"></div>' +
+    '<div class="field"><label>地区</label><select id="f-region" style="flex:1"><option value="">选择</option><option>默认地区</option>' + (d && d.region === 'golden' ? '<option value="golden" selected>黄金分割线</option>' : '') + '</select></div>' +
+    '<div class="cap-row"><label>验证码</label><input id="f-cap" placeholder="输入图中文字" value="' + (d ? d.cap : '') + '"><span class="cap-img ' + (state.rotated ? 'rot' : 'blur') + '" id="capImg"><span id="capText">信连</span></span></div>' +
+    '<div class="clock">系统时间：' + String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0') + '（已锁定）</div>' +
+    '<div class="agree-row"><input type="checkbox" id="agreeChk"' + (d && d.agreed ? ' checked' : '') + '><span>我已阅读并同意</span><span class="link" id="agreeLink">《信连使用协议》</span></div>' +
+    '<button class="about-link" id="aboutLink">关于信连</button>';
+
+  if (d && d.nick.includes('性别：自定义')) {
+    const box = document.getElementById('custom-gender-box');
+    box.innerHTML = row('自定义', '<input id="f-cg" placeholder="求解 x² + 1 = 0 的非实根，输入 x" value="' + (d.cg || '') + '">');
+    document.getElementById('f-cg').oninput = (ev) => {
+      const x = ev.target.value.trim();
+      state.customGender = x === '√(-1)' || x === 'sqrt(-1)' || x === 'i';
+    };
+  }
+
+  document.getElementById('f-gender').onclick = () => {
+    maleClick++;
+    if (maleClick >= 5) Notes.hit('Ω-01');
+  };
+  document.getElementById('f-gender').onchange = (e) => {
+    if (e.target.value === 'other') {
+      ui.toast('请于昵称栏声明：性别：自定义', 'error');
+    }
+  };
+  document.getElementById('f-nick').oninput = (e) => {
+    const v = e.target.value;
+    const box = document.getElementById('custom-gender-box');
+    if (v.includes('性别：自定义')) {
+      if (!box.querySelector('#f-cg')) {
+        box.innerHTML = row('自定义', '<input id="f-cg" placeholder="求解 x² + 1 = 0 的非实根，输入 x">');
+        document.getElementById('f-cg').oninput = (ev) => {
+          const x = ev.target.value.trim();
+          state.customGender = x === '√(-1)' || x === 'sqrt(-1)' || x === 'i';
+        };
+      }
+    } else {
+      box.innerHTML = '';
+      state.customGender = false;
+    }
+  };
+
+  let regionClicks = 0, regionTimer = null;
+  const regSel = document.getElementById('f-region');
+  const regHandler = () => {
+    regionClicks++;
+    clearTimeout(regionTimer);
+    regionTimer = setTimeout(() => { regionClicks = 0; }, 1500);
+    if (regionClicks >= 3) {
+      regionClicks = 0;
+      clearTimeout(regionTimer);
+      tryHiddenRegion();
+    }
+  };
+  regSel.addEventListener('mousedown', regHandler);
+  regSel.addEventListener('touchstart', regHandler, { passive: true });
+}
+
+function tryHiddenRegion() {
+  const sel = document.getElementById('f-region');
+  if (!sel.querySelector('option[value="golden"]')) {
+    const o = document.createElement('option');
+    o.value = 'golden';
+    o.textContent = '黄金分割线';
+    sel.appendChild(o);
+    ui.toast('发现隐藏选项');
+  }
+  sel.value = 'golden';
+  state.hiddenRegion = true;
+}
+
+function checkPhone(v) {
+  if (!/^\d{5,11}$/.test(v)) return '该号码已被劫持';
+  if (dr(+v) !== verDR) return '该号码已被劫持';
+  return '';
+}
+
+function checkNick(v) {
+  if (!v) return '昵称不能为空';
+  for (const p of forbid) {
+    if (v.includes(String(p))) return '昵称不得含有当前分钟数的质数因子';
+    const cn = cnMap[p];
+    if (cn && v.includes(cn)) return '昵称不得含有当前分钟数的质数因子';
+  }
+  return '';
+}
+
+function checkPwd(v) {
+  const segs = v.match(/\d+/g) || [];
+  const primes = segs.filter(s => isPrime(+s));
+  if (primes.length !== 1) return '强度不足：需要包含且仅包含一个质数';
+  return '';
+}
+
+function submitReg() {
+  const phone = document.getElementById('f-phone').value.trim();
+  const nick = document.getElementById('f-nick').value.trim();
+  const pwd = document.getElementById('f-pwd').value.trim();
+  const gender = document.getElementById('f-gender').value;
+  const region = document.getElementById('f-region').value;
+  const cap = document.getElementById('f-cap').value.trim();
+  const agreed = document.getElementById('agreeChk').checked;
+
+  if (!agreed) return fail('请先阅读并同意《信连使用协议》', 'agree');
+
+  const e1 = checkPhone(phone); if (e1) return fail(e1, 'phone');
+  const e2 = checkNick(nick); if (e2) return fail(e2, 'nick');
+  const e3 = checkPwd(pwd); if (e3) return fail(e3, 'pwd');
+
+  const hasDecl = nick.includes('性别：自定义');
+  if (gender === '男' || gender === '女') return fail('该性别已被占用', 'gender');
+  if (gender === 'other' && !hasDecl) return fail('请于昵称栏声明：性别：自定义', 'gender');
+  if (!hasDecl) return fail('请于昵称栏声明：性别：自定义', 'gender');
+  if (!state.customGender) return fail('请在自定义性别栏输入：求解 x²+1=0 的非实根', 'gender');
+
+  if (region !== 'golden') return fail('该地区不可用', 'region');
+
+  if (!state.rotated || cap !== '信连') {
+    capErr++;
+    if (capErr >= 10) Notes.hit('Ω-02');
+    return fail('验证码错误', 'cap');
+  }
+
+  S.set('acc', { phone, nickname: nick, pwd, gender: 'i' });
+  S.set('stage', 'stage1-login');
+  clearDraft();
+  ui.toast('注册成功，请登录', 'ok');
+  renderLogin();
+}
+
+function renderLogin() {
+  mode = 'login';
+  topName.textContent = '登录 · 信连';
+  back.style.visibility = 'visible';
+  back.onclick = renderChoose;
+  tools.style.display = 'none';
+  submitWrap.style.display = 'block';
+  const acc = S.get('acc') || {};
+  pane.innerHTML =
+    row('账号', '<input id="l-phone" value="' + (acc.phone || '') + '" readonly>') +
+    row('密码', '<input id="l-pwd" type="password" placeholder="密码">') +
+    '<div id="qr-hint">输入密码后点击提交获取二维码</div>' +
+    '<div id="qr-box"></div>';
+}
+
+function loginSubmit() {
+  const p = document.getElementById('l-pwd').value.trim();
+  const acc = S.get('acc') || {};
+  if (!acc.pwd) return ui.toast('请先注册', 'error');
+  if (p !== acc.pwd) return fail('设备未授权，请扫码', 'login');
+  showQR();
+}
+
+function showQR() {
+  ui.toast('设备未授权，请扫码');
+  const box = document.getElementById('qr-box');
+  let t = 0;
+  clearInterval(qrTimer);
+  qrTimer = setInterval(() => {
+    t++;
+    const valid = t === 3;
+    box.innerHTML =
+      '<div style="width:180px;height:180px;margin:14px auto;background:#fff;border:2px solid ' + (valid ? '#08C260' : '#ccc') + ';display:flex;align-items:center;justify-content:center;font-family:Consolas;font-size:12px;color:' + (valid ? '#08C260' : '#999') + '">' +
+        (valid ? 'QR VALID (3s)' : 'QR REFRESH ' + t) +
+      '</div>' +
+      '<button id="capture" style="padding:8px 20px;background:#08C260;color:#fff;border:0;border-radius:4px;cursor:pointer">截图捕捉</button>';
+    document.getElementById('capture').onclick = () => {
+      if (!valid) return fail('二维码已刷新，请重试', 'qr');
+      ui.toast('已捕捉，需反转颜色', 'ok');
+      setTimeout(() => {
+        box.innerHTML =
+          '<div style="padding:14px;font-size:13px;color:#666">图片需反转颜色</div>' +
+          '<button id="inv" style="padding:8px 20px;background:#2A2A2A;color:#fff;border:0;border-radius:4px;cursor:pointer">反转颜色</button>';
+        document.getElementById('inv').onclick = finalLogin;
+      }, 400);
+    };
+  }, 1000);
+}
+
+function finalLogin() {
+  clearInterval(qrTimer);
+  ui.popup('最后验证', '请在 5 秒内将鼠标移至屏幕左上角', [{
+    t: '明白', primary: true, fn: () => {
+      const hot = document.createElement('div');
+      hot.style.cssText = 'position:fixed;left:0;top:0;width:120px;height:120px;z-index:9999;background:rgba(8,194,96,.15);border:2px dashed #08C260;border-radius:0 0 8px 0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#08C260;pointer-events:auto;';
+      hot.textContent = '点这里';
+      document.body.appendChild(hot);
+
+      let done = false;
+      const ok = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(loginCheck);
+        hot.remove();
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('touchstart', onTouch);
+        ui.toast('验证通过', 'ok');
+        S.unlock('chat');
+        S.progress(15);
+        S.set('stage', 'stage2');
+        ui.omega('有趣，你居然进来了。但真正的游戏才刚开始——你准备好面对虚数了吗？');
+        setTimeout(() => location.href = 'stage2.html', 800);
+      };
+      const failFn = () => {
+        if (done) return;
+        done = true;
+        hot.remove();
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('touchstart', onTouch);
+        ui.toast('验证超时，重新验证', 'error');
+        S.add('errors', 1);
+        setTimeout(finalLogin, 600);
+      };
+      const onMove = (e) => {
+        if (e.clientX < 120 && e.clientY < 120) ok();
+      };
+      const onTouch = (e) => {
+        const t = e.touches[0];
+        if (t && t.clientX < 120 && t.clientY < 120) ok();
+      };
+      hot.onmouseenter = ok;
+      hot.ontouchstart = ok;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('touchstart', onTouch, { passive: true });
+      loginCheck = setTimeout(failFn, 5000);
+    }
+  }]);
+}
+
+document.getElementById('submit').onclick = () => {
+  if (mode === 'reg') submitReg();
+  else if (mode === 'login') loginSubmit();
+};
+
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'rotateBtn') {
+    const img = document.getElementById('capImg');
+    if (!img) return ui.toast('当前无需旋转', 'error');
+    state.rotated = true;
+    img.classList.remove('blur');
+    img.classList.add('rot');
+    ui.toast('屏幕已旋转 180°');
+  }
+  if (e.target.id === 'noteBtn') {
+    if (mode === 'reg') saveDraft();
+    location.href = 'notes.html?from=' + mode;
+  }
+  if (e.target.id === 'aboutLink') {
+    if (mode === 'reg') saveDraft();
+    location.href = 'about.html?from=' + mode;
+  }
+  if (e.target.id === 'agreeLink') {
+    if (mode === 'reg') saveDraft();
+    location.href = 'agreement.html?from=' + mode;
+  }
+});
+
+const qView = new URLSearchParams(location.search).get('view');
+if (qView === 'reg') renderReg();
+else if (qView === 'login') renderLogin();
+else renderChoose();
+</script>
+</body>
+</html>

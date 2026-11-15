@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连使用协议</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  body { background:#fff; }
+  .doc { max-width:480px; margin:0 auto; min-height:100vh; background:#fff; }
+  .doc-top { background:#2A2A2A; color:#fff; padding:14px; display:flex; align-items:center; font-size:16px; position:sticky; top:0; z-index:10; }
+  .doc-top .back { font-size:20px; cursor:pointer; width:40px; }
+  .doc-top .t { flex:1; text-align:center; }
+  .doc-body { padding:20px 18px 40px; font-size:13px; line-height:1.9; color:#333; }
+  .doc-body h2 { font-size:15px; margin:18px 0 8px; color:#111; }
+  .doc-body p { margin-bottom:10px; color:#555; }
+  .doc-body .em { color:#08C260; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-top">
+    <div class="back" id="back">‹</div>
+    <div class="t">信连使用协议</div>
+    <div style="width:40px"></div>
+  </div>
+  <div class="doc-body">
+    <p>欢迎使用信连。在使用本软件前，请您仔细阅读以下协议。</p>
+    <h2>一、服务说明</h2>
+    <p>信连是一款即时通讯软件，提供消息收发、动态圈、钱包、文件驿站等功能。本软件当前处于<span class="em">修复模式</span>，部分功能需按协议逐步恢复。</p>
+    <h2>二、账号与身份</h2>
+    <p>您需注册账号方可使用本软件。注册信息须真实有效。因黑客攻击导致的身份异常，由用户自行完成修复协议。</p>
+    <h2>三、数据与隐私</h2>
+    <p>修复过程中产生的所有数据仅保存在本地终端，不会上传至服务器。信连不对因数据丢失造成的损失承担责任。</p>
+    <h2>四、风险提示</h2>
+    <p>修复协议存在操作失败风险。若操作错误或超时，本地数据可能被永久清除。请谨慎操作。</p>
+    <h2>五、免责声明</h2>
+    <p>本游戏为完全虚构作品，所有名称、标识、界面均不指向任何现实品牌。致敬国民级社交软件，但本作无任何商业关联。</p>
+    <h2>六、协议接受</h2>
+    <p>勾选"我已阅读并同意《信连使用协议》"并完成注册，即视为您已接受本协议全部条款。</p>
+  </div>
+</div>
+<script>
+document.getElementById('back').onclick = () => {
+  const from = new URLSearchParams(location.search).get('from');
+  if (from === 'reg') location.href = 'stage1.html?view=reg';
+  else if (from === 'login') location.href = 'stage1.html?view=login';
+  else history.back();
+};
+</script>
+</body>
+</html>

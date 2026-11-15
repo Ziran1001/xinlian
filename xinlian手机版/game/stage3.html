@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 朋友圈</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  .moments-page { flex:1; overflow-y:auto; background:#ededed; }
+  .mom-cover { position:relative; height:200px; background:#222; overflow:hidden; }
+  .mom-cover canvas { width:100%; height:100%; display:block; }
+  .mom-cover.fixed { background:linear-gradient(135deg,#08C260,#06AD56); }
+  .mom-user { display:flex; align-items:flex-end; gap:12px; padding:0 14px; margin-top:-30px; position:relative; z-index:2; }
+  .mom-user .av { width:64px; height:64px; border-radius:8px; background:#08C260; color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; border:3px solid #fff; }
+  .mom-user .nm { padding-bottom:6px; font-size:16px; font-weight:600; }
+  .mom-post { background:#fff; margin:12px 0; padding:14px; }
+  .mom-post .ptxt { font-size:14px; color:#333; line-height:1.6; margin-bottom:10px; }
+  .mom-post .pimg { width:100%; height:160px; border-radius:6px; background:#222; overflow:hidden; }
+  .mom-post .pimg canvas { width:100%; height:100%; display:block; }
+  .mom-post .ploc { font-size:11px; color:#999; margin-top:8px; }
+  .mom-post .pbar { display:flex; justify-content:flex-end; margin-top:8px; }
+  .mom-post .dots { width:32px; height:24px; border-radius:4px; background:#f2f2f2; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; color:#666; letter-spacing:2px; }
+  .mom-post .dots:active { background:#e2e2e2; }
+  .mom-tools { display:flex; gap:8px; padding:14px; background:#fff; margin-bottom:14px; }
+  .mom-tools button { flex:1; padding:10px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; font-size:13px; }
+  .mom-tools button.gray { background:#888; }
+  .panel { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+  .panel.on { display:flex; }
+  .panel .box { background:#fff; padding:20px; border-radius:8px; width:340px; }
+  .panel .box h3 { font-size:15px; margin-bottom:12px; }
+  .panel .box input { width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; margin-bottom:10px; }
+  .panel .box button { width:100%; padding:9px; background:#08C260; color:#fff; border:0; border-radius:4px; cursor:pointer; }
+  .slider { width:100%; margin:10px 0; }
+  .act-menu { position:absolute; right:14px; background:#2A2A2A; border-radius:6px; padding:4px 0; min-width:110px; z-index:10; display:none; }
+  .act-menu.on { display:block; }
+  .act-menu div { padding:10px 16px; color:#eee; font-size:13px; cursor:pointer; }
+  .act-menu div:active { background:#3a3a3a; }
+  .wallet-list { padding:0; }
+  .wallet-list .app-row .bd .n { font-size:13px; }
+  .wallet-list .app-row .amt { font-size:14px; color:#333; font-weight:600; }
+  .wallet-list .app-row .amt.neg { color:#c33; }
+  .wallet-card { padding:20px 14px; background:linear-gradient(135deg,#08C260,#06AD56); color:#fff; margin-bottom:10px; }
+  .wallet-card .lbl { font-size:12px; opacity:.8; }
+  .wallet-card .bal { font-size:28px; font-weight:600; margin-top:6px; }
+  .wallet-card .note { font-size:11px; opacity:.8; margin-top:8px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script src="js/app.js"></script>
+<script>
+(function () {
+  if (!S.guard('moments')) return;
+
+  const GOLD = 0.618;
+  const LNG = 116.4;
+  let bright = 1;
+  let posts = S.get('posts') || [];
+
+  function renderOmega(body) {
+    body.innerHTML = App.topBar('Ω', { back: true, dots: true }) + '<div class="app-empty">加密通讯</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderGroup(body) {
+    body.innerHTML = App.topBar('修复者联盟', { back: true, dots: true }) + '<div class="app-empty">群聊已解禁</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+  function renderFile(body) {
+    body.innerHTML = App.topBar('文件驿站', { back: true, dots: true }) + '<div class="app-empty">已恢复</div>';
+    App.bindTop({ onBack: () => App.switchChatView('list'), onDots: App.showDots });
+  }
+
+  const contacts = [
+    { g: 'A', n: 'Ω', s: '加密通讯' },
+    { g: 'A', n: '阿黑', s: '已拉黑' },
+    { g: 'B', n: '被拉黑的人', s: '已被拉黑' },
+    { g: 'C', n: '残页', s: '已拉黑' },
+    { g: 'D', n: '数据包', s: '已拉黑' },
+    { g: 'F', n: '斐波那契', s: '已拉黑' },
+    { g: 'G', n: '黄金分割', s: '已拉黑' },
+    { g: 'H', n: '黑客Ω', s: '已拉黑' },
+    { g: 'J', n: '镜像', s: '已拉黑' },
+    { g: 'M', n: '密码', s: '已拉黑' },
+    { g: 'Q', n: '钱包', s: '已拉黑' },
+    { g: 'S', n: '数字根', s: '已拉黑' },
+    { g: 'W', n: '文件驿站', s: '已拉黑' },
+    { g: 'X', n: '修复协议', s: '已拉黑' },
+    { g: 'Y', n: '验证码', s: '已拉黑' }
+  ];
+  function renderContacts(body) {
+    let html = App.topBar('通讯录', { search: true, plus: true }) + '<div style="flex:1;overflow-y:auto;background:#fff">';
+    let lastG = '';
+    contacts.forEach((c, i) => {
+      if (c.g !== lastG) { html += '<div class="app-group">' + c.g + '</div>'; lastG = c.g; }
+      html += '<div class="app-row" data-ci="' + i + '"><div class="av">' + c.n.charAt(0) + '</div><div class="bd"><div class="n">' + c.n + '</div><div class="s">' + c.s + '</div></div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    App.bindTop({ onSearch: () => ui.toast('搜索模块待修复', 'error'), onPlus: App.showPlus });
+    body.querySelectorAll('.app-row[data-ci]').forEach(r => {
+      r.onclick = () => {
+        const c = contacts[+r.dataset.ci];
+        if (c.n === 'Ω') ui.toast('加密通讯，请前往聊天', 'ok');
+        else ui.toast('发送失败：你已被对方拉黑', 'error');
+      };
+    });
+  }
+
+  function renderMomentsPage(body) {
+    const fixed = S.get('momentsDone');
+    body.innerHTML =
+      App.topBar('朋友圈', { back: true }) +
+      '<div class="moments-page">' +
+        '<div class="mom-cover ' + (fixed ? 'fixed' : '') + '">' +
+          (fixed ? '' : '<canvas id="coverCv" width="400" height="200"></canvas>') +
+        '</div>' +
+        '<div class="mom-user"><div class="av">Ω</div><div class="nm">Ω</div></div>' +
+        '<div class="mom-post">' +
+          '<div class="ptxt">' + (fixed ? '协议已修复。你的选择决定了我的去向。' : '%%%&*#@ 你看见了不该看的 %%&*#@') + '</div>' +
+          '<div class="pimg"><canvas id="postCv" width="400" height="160"></canvas></div>' +
+          '<div class="ploc">' + (fixed ? '34.38°N, 116.4°E' : (posts[0] && posts[0].loc ? posts[0].loc : '未知位置')) + '</div>' +
+          '<div class="pbar"><div class="dots" id="dotsBtn">··</div></div>' +
+        '</div>' +
+        (fixed ? '' :
+          '<div class="mom-tools">' +
+            '<button id="post">发布动态</button>' +
+            '<button id="bright" class="gray">亮度调节</button>' +
+            '<button id="locate" class="gray">定位</button>' +
+          '</div>') +
+      '</div>' +
+      '<div class="act-menu" id="actMenu"><div data-act="like">赞</div><div data-act="comment">评论</div></div>';
+    App.bindTop({ onBack: () => App.switchDiscoverView('list') });
+
+    if (!fixed) drawCover();
+    drawPost(fixed);
+
+    document.getElementById('dotsBtn').onclick = (e) => {
+      e.stopPropagation();
+      const m = document.getElementById('actMenu');
+      m.classList.toggle('on');
+      m.style.top = (e.currentTarget.getBoundingClientRect().bottom + window.scrollY) + 'px';
+    };
+    document.addEventListener('click', () => {
+      const m = document.getElementById('actMenu');
+      if (m) m.classList.remove('on');
+    });
+
+    document.querySelectorAll('#actMenu div').forEach(d => {
+      d.onclick = () => {
+        const m = document.getElementById('actMenu');
+        if (m) m.classList.remove('on');
+        if (d.dataset.act === 'like') ui.toast('点赞功能已劫持', 'error');
+        else openComment();
+      };
+    });
+
+    if (!fixed) {
+      document.getElementById('post').onclick = openPost;
+      document.getElementById('bright').onclick = openBright;
+      document.getElementById('locate').onclick = openLocate;
+    }
+  }
+
+  function drawCover() {
+    const cv = document.getElementById('coverCv');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, 400, 200);
+    ctx.fillStyle = 'rgba(255,59,59,0.6)';
+    ctx.font = '20px Consolas';
+    for (let i = 0; i < 6; i++) {
+      ctx.fillText('Ω ERROR ' + Math.random().toString(16).slice(2, 8), 10, 30 + i * 28);
+    }
+  }
+
+  function drawPost(fixed) {
+    const cv = document.getElementById('postCv');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = fixed ? '#08C260' : '#222';
+    ctx.fillRect(0, 0, 400, 160);
+    if (fixed) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '16px Consolas';
+      ctx.fillText('PROTOCOL RESTORED', 20, 40);
+    } else {
+      const gx = Math.floor(400 * GOLD), gy = Math.floor(160 * GOLD);
+      ctx.fillStyle = (posts[0] && posts[0].cleared) ? 'rgba(255,255,255,' + (0.1 + 0.3 * bright) + ')' : 'rgba(255,255,255,0.08)';
+      ctx.fillRect(gx, gy, 2, 2);
+      if (posts[0] && posts[0].cleared) {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '13px Consolas';
+        ctx.fillText('OMEGA_HIDDEN', 20, 30);
+      }
+    }
+  }
+
+  function isPalin(s) {
+    const t = s.replace(/\s/g, '');
+    return t.length > 1 && t === t.split('').reverse().join('');
+  }
+
+  function openComment() {
+    if (S.get('momentsDone')) return ui.toast('朋友圈已修复', 'ok');
+    if (posts.some(p => p.commented)) return ui.toast('已评论过', 'error');
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>评论</h3>' +
+        '<div style="font-size:12px;color:#888;margin-bottom:8px">评论被屏蔽，需使用回文（正读反读皆可）</div>' +
+        '<input id="cmt" placeholder="输入回文">' +
+        '<button id="cok">提交</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    document.getElementById('cok').onclick = () => {
+      const v = document.getElementById('cmt').value.trim();
+      if (!isPalin(v)) { ui.toast('非回文，被屏蔽', 'error'); return; }
+      posts.push({ txt: '新动态', cleared: true, loc: '待定位', commented: true });
+      S.set('posts', posts);
+      mask.remove();
+      App.rerender();
+      ui.toast('评论放行', 'ok');
+      checkStage();
+    };
+  }
+
+  function openPost() {
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>发布动态</h3>' +
+        '<div style="font-size:12px;color:#888;margin-bottom:8px">选择图片</div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+          '<button id="pickBlack" style="flex:1;padding:8px;background:#222;color:#fff;border:0;border-radius:4px;cursor:pointer">纯黑</button>' +
+          '<button id="pickNormal" style="flex:1;padding:8px;background:#4a90d9;color:#fff;border:0;border-radius:4px;cursor:pointer">普通</button>' +
+        '</div>' +
+        '<div id="paint" style="display:none">' +
+          '<div style="font-size:12px;color:#888;margin-bottom:6px">在图片上点击以绘制像素（提示：黄金分割点）</div>' +
+          '<canvas id="postcv" width="300" height="140" style="width:100%;border-radius:4px;background:#222;cursor:crosshair"></canvas>' +
+        '</div>' +
+        '<button id="pub" style="margin-top:10px">发布</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    let cleared = false;
+    document.getElementById('pickBlack').onclick = () => {
+      document.getElementById('paint').style.display = 'block';
+      const cv = document.getElementById('postcv');
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 140);
+      cv.onclick = (e) => {
+        const r = cv.getBoundingClientRect();
+        const x = Math.floor((e.clientX - r.left) / r.width * 300);
+        const y = Math.floor((e.clientY - r.top) / r.height * 140);
+        const gx = Math.floor(300 * GOLD), gy = Math.floor(140 * GOLD);
+        if (Math.abs(x - gx) <= 4 && Math.abs(y - gy) <= 4) {
+          ctx.fillStyle = '#fff'; ctx.fillRect(x, y, 2, 2);
+          cleared = true;
+          ui.toast('恶意代码已清除', 'ok');
+        } else {
+          ui.toast('未命中黄金分割点', 'error');
+        }
+      };
+      Notes.hit('Ω-04');
+    };
+    document.getElementById('pickNormal').onclick = () => {
+      document.getElementById('paint').style.display = 'block';
+      const cv = document.getElementById('postcv');
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#4a90d9'; ctx.fillRect(0, 0, 300, 140);
+      cv.onclick = () => {};
+      ui.toast('检测到恶意代码，请尝试纯黑图', 'error');
+    };
+    document.getElementById('pub').onclick = () => {
+      if (!cleared) { ui.toast('检测到恶意代码', 'error'); S.add('errors', 1); return; }
+      posts.push({ txt: '新动态', cleared: true, loc: '待定位' });
+      S.set('posts', posts);
+      mask.remove();
+      App.rerender();
+      ui.toast('发布成功', 'ok');
+      checkStage();
+    };
+  }
+
+  function openBright() {
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>屏幕亮度</h3>' +
+        '<input type="range" min="0.3" max="1.618" step="0.001" value="' + bright + '" class="slider" id="bv">' +
+        '<div style="font-size:12px;color:#888;text-align:center" id="bvv">' + bright.toFixed(3) + '×</div>' +
+        '<button id="bok">确定</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    const bv = document.getElementById('bv');
+    bv.oninput = () => {
+      bright = +bv.value;
+      document.getElementById('bvv').textContent = bright.toFixed(3) + '×';
+      document.body.style.filter = 'brightness(' + bright + ')';
+    };
+    document.getElementById('bok').onclick = () => {
+      mask.remove();
+      document.body.style.filter = '';
+      if (bright >= 1.6) {
+        ui.toast('图片已清晰', 'ok');
+        App.rerender();
+        checkStage();
+      }
+    };
+  }
+
+  function openLocate() {
+    const mask = ui.el('div', 'panel on');
+    mask.innerHTML =
+      '<div class="box">' +
+        '<h3>手动定位</h3>' +
+        '<div style="font-size:12px;color:#888;margin-bottom:6px">纬度（黄金分割角）</div>' +
+        '<input id="lat" placeholder="如 34.38">' +
+        '<div style="font-size:12px;color:#888;margin-bottom:6px">经度（从「我→服务→账单」查看）</div>' +
+        '<input id="lng" placeholder="从钱包账单中找到">' +
+        '<button id="lok">确定</button>' +
+      '</div>';
+    document.body.appendChild(mask);
+    document.getElementById('lok').onclick = () => {
+      const la = +document.getElementById('lat').value;
+      const ln = +document.getElementById('lng').value;
+      if (Math.abs(la - 34.38) < 0.1 && Math.abs(ln - LNG) < 0.5) {
+        mask.remove();
+        const p = posts[0] || { txt: '新动态', cleared: true };
+        p.loc = '34.38°N, ' + LNG + '°E';
+        posts[0] = p;
+        S.set('posts', posts);
+        App.rerender();
+        ui.toast('定位成功', 'ok');
+        checkStage();
+      } else {
+        ui.toast('坐标不匹配', 'error');
+        S.add('errors', 1);
+      }
+    };
+  }
+
+  function renderMe(body) {
+    const acc = S.get('acc') || {};
+    body.innerHTML =
+      App.topBar('我') +
+      '<div class="me-header"><div class="av">' + (acc.nickname ? acc.nickname.charAt(0) : 'Ω') + '</div><div><div class="n">' + (acc.nickname || '修复者') + '</div><div class="s">微信号：' + (acc.phone || 'wxid_omega') + '</div></div></div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="goWallet"><div class="bd"><div class="n">服务（钱包）</div><div class="s">冻结</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">收藏</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row" id="goMoments"><div class="bd"><div class="n">朋友圈</div><div class="s">' + (S.get('momentsDone') ? '已修复' : '待修复') + '</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">作品</div><div class="s">待修复</div></div></div>' +
+        '<div class="app-row disabled"><div class="bd"><div class="n">设置</div><div class="s">待修复</div></div></div>' +
+      '</div>' +
+      '<div class="me-list">' +
+        '<div class="app-row" id="mAbout"><div class="bd"><div class="n">关于信连</div></div><div class="arrow">›</div></div>' +
+        '<div class="app-row" id="mNotes"><div class="bd"><div class="n">Ω 的数学笔记</div></div><div class="arrow">›</div></div>' +
+      '</div>';
+    document.getElementById('goWallet').onclick = () => App.switchMeView('wallet');
+    document.getElementById('goMoments').onclick = () => { App.switchTab('discover'); App.switchDiscoverView('moments'); };
+    document.getElementById('mAbout').onclick = () => location.href = 'about.html?from=stage3';
+    document.getElementById('mNotes').onclick = () => location.href = 'notes.html?from=stage3';
+  }
+
+  const bills = [
+    { t: '转账给 Ω', amt: '-0.01', note: '坐标：经度 116.4' },
+    { t: '收款 from 修复者', amt: '+233.33', note: '斐波那契第13项' },
+    { t: '转账给 阿黑', amt: '-12.00', note: '已拉黑' },
+    { t: '收款 from 数据包', amt: '+1.00', note: 'Payload Injected' }
+  ];
+  function renderWallet(body) {
+    body.innerHTML =
+      App.topBar('服务', { back: true }) +
+      '<div class="wallet-card">' +
+        '<div class="lbl">余额（冻结）</div>' +
+        '<div class="bal">¥ 0.00</div>' +
+        '<div class="note">钱包已冻结，请完成修复协议解冻</div>' +
+      '</div>' +
+      '<div class="app-group">账单</div>' +
+      '<div class="me-list wallet-list" id="billList"></div>' +
+      '<div style="padding:16px"><button id="transferBtn" style="width:100%;padding:12px;background:#08C260;color:#fff;border:0;border-radius:6px;font-size:15px;cursor:pointer">转账</button></div>';
+    App.bindTop({ onBack: () => App.switchMeView('main') });
+    const list = document.getElementById('billList');
+    list.innerHTML = bills.map((b, i) =>
+      '<div class="app-row" data-bi="' + i + '"><div class="bd"><div class="n">' + b.t + '</div><div class="s">' + b.note + '</div></div><div class="amt ' + (b.amt.startsWith('-') ? 'neg' : '') + '">' + b.amt + '</div></div>'
+    ).join('');
+    list.querySelectorAll('.app-row[data-bi]').forEach(r => {
+      r.onclick = () => {
+        const b = bills[+r.dataset.bi];
+        if (b.note.includes('经度')) ui.toast('备注：' + b.note, 'ok');
+        else ui.toast(b.t + ' ' + b.amt, 'ok');
+      };
+    });
+    document.getElementById('transferBtn').onclick = () => ui.toast('钱包已冻结，无法转账', 'error');
+  }
+
+  function checkStage() {
+    if (S.get('momentsDone')) return;
+    const hasPost = posts.length > 0;
+    const hasComment = posts.some(p => p.commented);
+    const hasLoc = posts.some(p => p.loc && p.loc !== '待定位');
+    if (hasPost && hasComment && hasLoc && bright >= 1.6) {
+      S.set('momentsDone', true);
+      S.unlock('wallet');
+      S.progress(45);
+      ui.omega('你找到了黄金，但还没找到我的宝藏。');
+      App.rerender();
+      setTimeout(() => {
+        ui.popup('阶段完成', '朋友圈已恢复。<br>修复进度 45%', [{
+          t: '前往钱包', primary: true, fn: () => {
+            S.set('stage', 'stage4');
+            location.href = 'stage4.html';
+          }
+        }]);
+      }, 800);
+    }
+  }
+
+  App.init(document.getElementById('root'), {
+    defaultTab: 'discover',
+    renderOmega, renderGroup, renderFile, renderContacts, renderMomentsPage, renderMe, renderWallet,
+    onScan: () => ui.toast('扫一扫模块待修复', 'error')
+  });
+
+  setTimeout(() => App.switchDiscoverView('moments'), 30);
+})();
+</script>
+</body>
+</html>

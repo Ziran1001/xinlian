@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Ω 的数学笔记</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  body { background:#111; }
+  .doc { max-width:480px; margin:0 auto; min-height:100vh; background:#111; color:#ddd; font-family:Consolas,monospace; }
+  .doc-top { background:#1a1a1a; color:#ff3b3b; padding:14px; display:flex; align-items:center; font-size:16px; position:sticky; top:0; z-index:10; border-bottom:1px solid #2a2a2a; }
+  .doc-top .back { font-size:20px; cursor:pointer; width:40px; color:#ddd; }
+  .doc-top .t { flex:1; text-align:center; }
+  .doc-body { padding:20px 18px 40px; font-size:13px; line-height:1.9; }
+  .note { border-left:2px solid #ff3b3b; padding:8px 12px; margin-bottom:14px; background:#1a1a1a; border-radius:0 4px 4px 0; }
+  .note .id { color:#ff3b3b; font-size:11px; }
+  .note .txt { color:#ccc; margin-top:4px; }
+  .empty { text-align:center; color:#666; padding:60px 0; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-top">
+    <div class="back" id="back">‹</div>
+    <div class="t" id="title">Ω 的数学笔记</div>
+    <div style="width:40px"></div>
+  </div>
+  <div class="doc-body" id="body"></div>
+</div>
+<script src="js/save.js"></script>
+<script src="js/notes.js"></script>
+<script>
+const got = S.get('notes') || [];
+const body = document.getElementById('body');
+document.getElementById('title').textContent = 'Ω 的数学笔记 (' + got.length + '/10)';
+if (!got.length) {
+  body.innerHTML = '<div class="empty">暂无收集</div>';
+} else {
+  body.innerHTML = got.map(id =>
+    '<div class="note"><div class="id">' + id + '</div><div class="txt">' + (Notes.DB[id] || '???') + '</div></div>'
+  ).join('');
+}
+document.getElementById('back').onclick = () => {
+  const from = new URLSearchParams(location.search).get('from');
+  if (from === 'reg') location.href = 'stage1.html?view=reg';
+  else if (from === 'login') location.href = 'stage1.html?view=login';
+  else history.back();
+};
+</script>
+</body>
+</html>

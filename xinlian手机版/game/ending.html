@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 结算</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  body { background:#0a0a0a; color:#ddd; font-family:Consolas,monospace; }
+  .end-wrap { max-width:520px; margin:0 auto; padding:40px 20px 60px; min-height:100vh; }
+  .end-title { text-align:center; font-size:22px; letter-spacing:4px; color:#fff; margin-bottom:8px; }
+  .end-sub { text-align:center; font-size:12px; color:#666; margin-bottom:30px; }
+  .end-box { background:#141414; border:1px solid #2a2a2a; border-radius:8px; padding:20px; margin-bottom:16px; }
+  .end-box h3 { font-size:14px; color:#08C260; margin-bottom:12px; letter-spacing:1px; }
+  .end-row { display:flex; justify-content:space-between; font-size:13px; padding:7px 0; border-bottom:1px solid #1e1e1e; }
+  .end-row:last-child { border-bottom:0; }
+  .end-row .k { color:#888; }
+  .end-row .v { color:#ddd; }
+  .end-row .v.g { color:#08C260; }
+  .end-row .v.r { color:#ff3b3b; }
+  .end-omega { background:#1a0808; border:1px solid #4a1a1a; border-radius:8px; padding:20px; margin-bottom:16px; }
+  .end-omega .oh { font-size:11px; color:#ff3b3b; margin-bottom:10px; }
+  .end-omega .ot { font-size:14px; line-height:1.9; color:#ffb3b3; }
+  .end-notes { background:#141414; border:1px solid #2a2a2a; border-radius:8px; padding:20px; margin-bottom:16px; }
+  .end-notes h3 { font-size:14px; color:#08C260; margin-bottom:12px; }
+  .end-note-item { font-size:12px; color:#999; padding:6px 0; border-bottom:1px solid #1e1e1e; display:flex; gap:10px; }
+  .end-note-item:last-child { border-bottom:0; }
+  .end-note-item .ni { color:#ff3b3b; flex-shrink:0; width:50px; }
+  .end-note-item .nt { flex:1; color:#bbb; }
+  .end-actions { text-align:center; margin-top:24px; }
+  .end-actions button { padding:12px 30px; background:transparent; border:1px solid #444; color:#ccc; font-size:14px; border-radius:6px; cursor:pointer; margin:0 8px; }
+  .end-actions button:hover { border-color:#08C260; color:#08C260; }
+  .end-actions button.primary { background:#08C260; color:#fff; border-color:#08C260; }
+  .end-actions button.primary:hover { background:#06AD56; }
+  .end-badge { display:inline-block; padding:4px 12px; border-radius:4px; font-size:12px; margin-left:8px; }
+  .end-badge.S { background:#ffd700; color:#000; }
+  .end-badge.A { background:#08C260; color:#fff; }
+  .end-badge.B { background:#4a90d9; color:#fff; }
+  .end-badge.C { background:#888; color:#fff; }
+  .end-hidden { text-align:center; color:#ff3b3b; font-size:13px; margin-top:16px; line-height:1.8; }
+</style>
+</head>
+<body>
+<div class="end-wrap" id="endWrap"></div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notes.js"></script>
+<script>
+(function () {
+  const start = S.get('startTime') || Date.now();
+  const elapsed = Math.floor((Date.now() - start) / 1000);
+  const minutes = Math.floor(elapsed / 60);
+  const grade = minutes < 45 ? 'S' : minutes < 60 ? 'A' : minutes < 75 ? 'B' : 'C';
+  const choice = S.get('choice') || 'delete';
+  const notes = S.get('notes') || [];
+  const errs = S.get('errors') || 0;
+  const evt = S.get('events') || { win: 0, fail: 0 };
+  const frag = !!S.get('frag');
+  const finalKey = S.get('finalKey') || 0;
+
+  const choiceLabel = choice === 'delete' ? '删除后门 · 纯粹修复者' : '保留后门 · 暗面行者';
+  const omegaLine = choice === 'delete'
+    ? '你赢了，但你的纯净让我无趣。再见。'
+    : '哈哈，你果然和我一样疯狂。我在后台等你。';
+
+  let noteHtml = '';
+  if (notes.length === 0) {
+    noteHtml = '<div style="text-align:center;color:#666;font-size:12px;padding:10px">未收集到任何 Ω 注释</div>';
+  } else {
+    notes.forEach(id => {
+      noteHtml += '<div class="end-note-item"><span class="ni">' + id + '</span><span class="nt">' + (Notes.DB[id] || '???') + '</span></div>';
+    });
+  }
+
+  const fullCollect = notes.length >= 10;
+
+  document.getElementById('endWrap').innerHTML =
+    '<div class="end-title">修复完成</div>' +
+    '<div class="end-sub">REPAIR PROTOCOL · COMPLETE</div>' +
+
+    '<div class="end-box">' +
+      '<h3>结算面板</h3>' +
+      '<div class="end-row"><span class="k">通关总时间</span><span class="v">' + minutes + ' 分 ' + (elapsed % 60) + ' 秒 <span class="end-badge ' + grade + '">' + grade + '</span></span></div>' +
+      '<div class="end-row"><span class="k">错误总次数</span><span class="v">' + errs + '</span></div>' +
+      '<div class="end-row"><span class="k">动态事件成功率</span><span class="v">' + evt.win + ' 成功 / ' + evt.fail + ' 失败</span></div>' +
+      '<div class="end-row"><span class="k">最终密钥</span><span class="v">' + finalKey + '</span></div>' +
+      '<div class="end-row"><span class="k">最终抉择</span><span class="v ' + (choice === 'delete' ? 'g' : 'r') + '">' + choiceLabel + '</span></div>' +
+      '<div class="end-row"><span class="k">Ω 注释收集率</span><span class="v">' + notes.length + ' / 10' + (fullCollect ? ' <span class="end-badge S">全收集</span>' : '') + '</span></div>' +
+      (frag ? '<div class="end-row"><span class="k">密文碎片</span><span class="v g">已持有</span></div>' : '') +
+    '</div>' +
+
+    '<div class="end-omega">' +
+      '<div class="oh">Ω 的遗言</div>' +
+      '<div class="ot">' + omegaLine + '</div>' +
+    '</div>' +
+
+    '<div class="end-notes">' +
+      '<h3>Ω 的数学注释 (' + notes.length + '/10)</h3>' +
+      noteHtml +
+    '</div>' +
+
+    '<div class="end-actions">' +
+      '<button id="restartBtn">重新开始</button>' +
+      '<button class="primary" id="againBtn">再次修复</button>' +
+    '</div>' +
+
+    (fullCollect ?
+      '<div class="end-hidden">' +
+        '隐藏结局解锁<br>' +
+        'Ω 的完整肖像：一个痴迷于数学的极客艺术家，在代码深处等待下一个对手。<br>' +
+        '「你找到了我。」' +
+      '</div>' : '');
+
+  document.getElementById('restartBtn').onclick = () => {
+    S.reset();
+    location.href = 'index.html';
+  };
+  document.getElementById('againBtn').onclick = () => {
+    S.reset();
+    location.href = 'index.html';
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 删档</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  body { background:#111; display:flex; align-items:center; justify-content:center; height:100vh; font-family:Consolas,monospace; }
+  .box { text-align:center; color:#eee; max-width:400px; padding:20px; }
+  .box h1 { font-size:18px; letter-spacing:2px; margin-bottom:10px; color:#ff3b3b; }
+  .box p { font-size:13px; color:#888; line-height:1.8; margin-bottom:24px; }
+  .box button { padding:12px 30px; border:1px solid #444; background:transparent; color:#ccc; font-size:14px; border-radius:6px; cursor:pointer; margin:0 6px; }
+  .box button:hover { border-color:#08C260; color:#08C260; }
+  .box button.danger { border-color:#ff3b3b; color:#ff3b3b; }
+  .box button.danger:hover { background:#ff3b3b; color:#fff; }
+  .done { color:#08C260; font-size:14px; margin-top:20px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>一键删档</h1>
+  <p>将清空 localStorage 和 sessionStorage 中的所有游戏存档、进度、注释收集。<br>此操作不可恢复。</p>
+  <div id="btns">
+    <button class="danger" id="doReset">确认删档</button>
+    <button id="back">返回</button>
+  </div>
+  <div class="done" id="done" style="display:none">已清空，3 秒后返回首页…</div>
+</div>
+<script>
+document.getElementById('doReset').onclick = () => {
+  localStorage.clear();
+  sessionStorage.clear();
+  document.getElementById('btns').style.display = 'none';
+  document.getElementById('done').style.display = 'block';
+  setTimeout(() => location.href = 'index.html', 3000);
+};
+document.getElementById('back').onclick = () => history.back();
+</script>
+</body>
+</html>

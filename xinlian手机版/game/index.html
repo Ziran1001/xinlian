@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>信连 · 修复协议</title>
+<link rel="stylesheet" href="css/common.css">
+<style>
+  body { background:#111; display:flex; align-items:center; justify-content:center; height:100vh; height:100dvh; overflow:hidden; }
+  .boot { text-align:center; color:#eee; font-family:Consolas,monospace; padding-bottom:60px; }
+  .logo { width:96px; height:96px; border-radius:50%; background:#08C260; display:flex; align-items:center; justify-content:center; margin:0 auto 18px; position:relative; }
+  .logo svg { width:52px; height:52px; }
+  .logo::after { content:''; position:absolute; inset:-8px; border:2px dashed #ff3b3b; border-radius:50%; animation:spin 6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .boot h1 { font-size:20px; letter-spacing:4px; font-weight:400; }
+  .boot .stuck { margin-top:24px; color:#888; font-size:13px; }
+  .boot .stuck b { color:#ff3b3b; }
+  .boot .actions { margin-top:28px; display:flex; flex-direction:column; gap:12px; align-items:center; }
+  .boot button { width:260px; padding:12px 26px; border:1px solid #444; background:transparent; color:#ccc; font-size:14px; cursor:pointer; border-radius:6px; }
+  .boot button:hover { border-color:#08C260; color:#08C260; }
+  .boot button.primary { border-color:#08C260; color:#08C260; }
+  .boot button:disabled { opacity:.35; cursor:not-allowed; }
+  .boot button:disabled:hover { border-color:#444; color:#ccc; }
+  .law { position:fixed; bottom:12px; left:0; right:0; text-align:center; color:#555; font-size:11px; padding:0 20px; line-height:1.5; }
+  @media (max-width:600px) {
+    .boot button { width:80vw; padding:14px; font-size:15px; }
+  }
+</style>
+</head>
+<body>
+<div class="boot">
+  <div class="logo">
+    <svg viewBox="0 0 52 52" fill="none" stroke="#fff" stroke-width="4">
+      <circle cx="26" cy="26" r="20"/>
+      <line x1="6" y1="26" x2="46" y2="26"/>
+    </svg>
+  </div>
+  <h1>信连</h1>
+  <div class="stuck">修复协议加载中… <b>99%</b></div>
+  <div class="actions">
+    <button class="primary" id="startBtn">开始游戏</button>
+    <button id="loadBtn">读取存档</button>
+  </div>
+</div>
+<div class="law">本游戏为完全虚构作品，所有名称、标识、界面均不指向任何现实品牌。致敬国民级社交软件，但本作无任何商业关联。</div>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script>
+const STAGE_MAP = {
+  'stage1': 'stage1.html',
+  'stage1-login': 'stage1.html?view=login',
+  'stage2': 'stage2.html',
+  'stage3': 'stage3.html',
+  'stage4': 'stage4.html',
+  'stage5': 'stage5.html',
+  'stage6': 'stage6.html',
+  'stage7': 'stage7.html',
+  'ending': 'ending.html'
+};
+
+function hasSave() {
+  const st = S.get('stage');
+  const acc = S.get('acc');
+  return !!(acc && acc.phone && st && st !== 'index' && STAGE_MAP[st]);
+}
+
+const loadBtn = document.getElementById('loadBtn');
+if (!hasSave()) loadBtn.disabled = true;
+
+document.getElementById('startBtn').onclick = () => {
+  if (hasSave()) {
+    ui.popup('开始新游戏', '已有存档，开始新游戏将清空存档。确定？', [
+      { t: '取消' },
+      { t: '清空并开始', primary: true, fn: () => { S.reset(); location.href = 'stage1.html'; } }
+    ]);
+  } else {
+    location.href = 'stage1.html';
+  }
+};
+
+loadBtn.onclick = () => {
+  if (!hasSave()) return;
+  const st = S.get('stage');
+  location.href = STAGE_MAP[st] || 'stage1.html';
+};
+</script>
+</body>
+</html>
